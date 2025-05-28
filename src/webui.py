@@ -143,8 +143,8 @@ if __name__ == '__main__':
                             pitch = gr.Slider(-3, 3, value=0, step=1, label="Vocal Pitch (Octaves)", info="1 for male-to-female, -1 for vice-versa")
                             pitch_all = gr.Slider(-12, 12, value=0, step=1, label="Overall Pitch (Semitones)", info="Adjusts vocals and instrumentals")
 
-                    show_file_upload_button.click(swap_visibility, inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file], _js="() => {return {visibility_state: !visibility_state}}")
-                    show_yt_link_button.click(swap_visibility, inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file], _js="() => {return {visibility_state: !visibility_state}}")
+                    show_file_upload_button.click(swap_visibility, inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
+                    show_yt_link_button.click(swap_visibility, inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
                     song_input_file.upload(process_file_upload, inputs=[song_input_file], outputs=[local_file, song_input])
 
                 with gr.Accordion("Voice Conversion Options", open=False):
