@@ -2,7 +2,8 @@ import ffmpeg
 import numpy as np
 from huggingface_hub import hf_hub_download
 import os
-from main import BASE_DIR
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
 
 
