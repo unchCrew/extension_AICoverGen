@@ -8,7 +8,7 @@ tqdm
 wget
 huggingface_hub
 deemix
-git@https://github.com/unchCrew/fairseq.git
+git+https://github.com/unchCrew/fairseq.git
 faiss-cpu==1.7.3
 ffmpeg-python>=0.2.0
 gradio
