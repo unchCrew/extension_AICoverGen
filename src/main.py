@@ -96,12 +96,12 @@ def download_youtube(link: str, is_webui: bool) -> str:
     cookies_path = get_cookies_path()
     ydl_opts = {
         'format': 'bestaudio',
-        'outtmpl': str(OUTPUT_DIR / '%(title)s.%(ext)s'),  # Ensure output path is in OUTPUT_DIR
+        'outtmpl': str(OUTPUT_DIR / '%(title)s.%(ext)s'),
         'no_warnings': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
         'writesubtitles': False,
         'writeautomaticsub': False,
-        'no_cookies': not cookies_path,  # Disable cookies if no valid cookies file
+        'no_cookies': not cookies_path,
     }
     if cookies_path:
         ydl_opts['cookiefile'] = str(cookies_path)
@@ -117,11 +117,10 @@ def download_youtube(link: str, is_webui: bool) -> str:
         raise_error(f"YouTube download failed: {str(e)}. Ensure the URL is valid and the video is publicly accessible.", is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
-    if
-
- is_webui:
+    if is_webui:
         raise gr.Error(message)
-    raise ValueError(message)
+    else:
+        raise ValueError(message)
 
 def get_rvc_model(voice_model: str, is_webui: bool) -> Tuple[str, str]:
     model_dir = RVC_MODELS_DIR / voice_model
