@@ -80,7 +80,7 @@ def get_youtube_video_id(url: str, ignore_playlist: bool = True) -> Optional[str
             return query.path.split('/')[2]
     return None
 
-def download_youtube(link: str) -> str:
+def download_youtube(link: str, is_webui: bool) -> str:
     ydl_opts = {
         'format': 'bestaudio',
         'outtmpl': '%(title)s.mp3',
@@ -88,9 +88,15 @@ def download_youtube(link: str) -> str:
         'no_warnings': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        result = ydl.extract_info(link, download=True)
-        return ydl.prepare_filename(result, outtmpl='%(title)s.mp3')
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            result = ydl.extract_info(link, download=True)
+            output_path = ydl.prepare_filename(result, outtmpl='%(title)s.mp3')
+            if not Path(output_path).exists():
+                raise_error(f"Failed to download audio: {output_path} does not exist.", is_webui)
+            return output_path
+    except Exception as e:
+        raise_error(f"YouTube download failed: {str(e)}", is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
     if is_webui:
@@ -115,6 +121,8 @@ def get_rvc_model(voice_model: str, is_webui: bool) -> Tuple[str, str]:
 
 def get_audio_paths(song_dir: Path) -> Dict[str, Optional[str]]:
     paths = {'orig': None, 'inst': None, 'main_vocals': None, 'backup_vocals': None}
+    if not song_dir.exists():
+        return paths
     for file in song_dir.iterdir():
         if file.name.endswith('_Instrumental.wav'):
             paths['inst'] = str(file)
@@ -130,6 +138,8 @@ def to_stereo(audio_path: str) -> str:
     if not isinstance(wave[0], np.ndarray):
         stereo_path = f"{Path(audio_path).stem}_stereo.wav"
         subprocess.run(shlex.split(f'ffmpeg -y -loglevel error -i "{audio_path}" -ac 2 -f wav "{stereo_path}"'), check=True)
+        if not Path(stereo_path).exists():
+            raise ValueError(f"Failed to convert to stereo: {stereo_path} does not exist.")
         return stereo_path
     return audio_path
 
@@ -140,6 +150,8 @@ def pitch_shift(audio_path: str, pitch_change: float) -> str:
         tfm = sox.Transformer()
         tfm.pitch(pitch_change)
         sf.write(output_path, tfm.build_array(input_array=y, sample_rate_in=sr), sr)
+        if not Path(output_path).exists():
+            raise ValueError(f"Failed to apply pitch shift: {output_path} does not exist.")
     return output_path
 
 def get_file_hash(filepath: str) -> str:
@@ -163,7 +175,9 @@ def preprocess_song(song_input: str, mdx_model_params: dict, song_id: str, is_we
     song_dir.mkdir(parents=True, exist_ok=True)
     
     show_progress('Preparing audio input...', 0, is_webui, progress)
-    orig_song_path = download_youtube(song_input.split('&')[0]) if input_type == 'yt' else song_input
+    orig_song_path = download_youtube(song_input.split('&')[0], is_webui) if input_type == 'yt' else song_input
+    if not Path(orig_song_path).exists():
+        raise_error(f"Audio file {orig_song_path} not found after download.", is_webui)
     orig_song_path = to_stereo(orig_song_path)
 
     show_progress('Separating vocals from instrumental...', 0.2, is_webui, progress)
@@ -171,18 +185,24 @@ def preprocess_song(song_input: str, mdx_model_params: dict, song_id: str, is_we
         mdx_model_params, str(song_dir), str(MDX_MODELS_DIR / 'UVR-MDX-NET-Voc_FT.onnx'),
         orig_song_path, denoise=True, keep_orig=input_type == 'local'
     )
+    if not (Path(vocals_path).exists() and Path(inst_path).exists()):
+        raise_error("Failed to separate vocals and instrumental.", is_webui)
 
     show_progress('Separating main and backup vocals...', 0.4, is_webui, progress)
     backup_vocals, main_vocals = run_mdx(
         mdx_model_params, str(song_dir), str(MDX_MODELS_DIR / 'UVR_MDXNET_KARA_2.onnx'),
         vocals_path, suffix='Backup', invert_suffix='Main', denoise=True
     )
+    if not (Path(backup_vocals).exists() and Path(main_vocals).exists()):
+        raise_error("Failed to separate main and backup vocals.", is_webui)
 
     show_progress('Applying dereverb to main vocals...', 0.6, is_webui, progress)
     _, main_vocals_dereverb = run_mdx(
         mdx_model_params, str(song_dir), str(MDX_MODELS_DIR / 'Reverb_HQ_By_FoxJoy.onnx'),
         main_vocals, invert_suffix='DeReverb', exclude_main=True, denoise=True
     )
+    if not Path(main_vocals_dereverb).exists():
+        raise_error("Failed to apply dereverb to main vocals.", is_webui)
 
     return {
         'orig': orig_song_path,
@@ -204,6 +224,8 @@ def voice_change(voice_model: str, vocals_path: str, output_path: str, pitch_cha
         cpt, version, net_g, tgt_sr, vc = get_vc(config.device, config.is_half, config, model_path)
         rvc_infer(index_path, index_rate, vocals_path, output_path, pitch_change, f0_method,
                   cpt, version, net_g, filter_radius, tgt_sr, rms_mix_rate, protect, crepe_hop_length, vc, hubert_model)
+        if not Path(output_path).exists():
+            raise_error(f"Voice conversion failed: {output_path} does not exist.", is_webui)
     finally:
         del hubert_model, cpt, vc, net_g
         gc.collect()
@@ -220,6 +242,8 @@ def add_audio_effects(audio_path: str, reverb_rm_size: float, reverb_wet: float,
         while f.tell() < f.frames:
             chunk = f.read(int(f.samplerate))
             o.write(board(chunk, f.samplerate, reset=False))
+    if not Path(output_path).exists():
+        raise ValueError(f"Failed to apply audio effects: {output_path} does not exist.")
     return output_path
 
 def combine_audio(audio_paths: list, output_path: str, main_gain: float, backup_gain: float, inst_gain: float, output_format: str) -> None:
@@ -227,6 +251,8 @@ def combine_audio(audio_paths: list, output_path: str, main_gain: float, backup_
     backup_vocal = AudioSegment.from_wav(audio_paths[1]) - 6 + backup_gain
     instrumental = AudioSegment.from_wav(audio_paths[2]) - 7 + inst_gain
     main_vocal.overlay(backup_vocal).overlay(instrumental).export(output_path, format=output_format)
+    if not Path(output_path).exists():
+        raise ValueError(f"Failed to combine audio: {output_path} does not exist.")
 
 def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, keep_files: bool, is_webui: bool = False, 
                        main_gain: float = 0, backup_gain: float = 0, inst_gain: float = 0, index_rate: float = 0.5, 
@@ -257,9 +283,10 @@ def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, 
             song_id = get_file_hash(song_input)
         
         song_dir = OUTPUT_DIR / song_id
+        song_dir.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
         audio_paths = get_audio_paths(song_dir)
         
-        if not song_dir.exists() or any(v is None for v in audio_paths.values()) or not keep_files:
+        if not audio_paths['orig'] or not keep_files:
             audio_paths = preprocess_song(song_input, mdx_model_params, song_id, is_webui, input_type, progress)
         
         pitch_change = pitch_change * 12 + pitch_change_all
