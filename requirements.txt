@@ -12,7 +12,7 @@ git+https://github.com/unchCrew/fairseq.git
 faiss-cpu==1.7.3
 ffmpeg-python>=0.2.0
 gradio
-lib==4.0.0
+lib
 librosa==0.9.1
 onnxruntime_gpu
 praat-parselmouth>=0.4.2
@@ -22,8 +22,11 @@ pyworld==0.3.4
 scipy==1.11.1
 soundfile==0.12.1
 --find-links https://download.pytorch.org/whl/torch_stable.html
-torch==2.0.1+cu118
+torch==2.7.0
+torchaudio==2.7.0
+torchvision
 torchcrepe==0.0.23
+torchfcpe
 tqdm
 yt_dlp
 sox
