@@ -75,8 +75,8 @@ The WebUI is actively developed and tested, available for both local and Google 
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/SociallyIneptWeeb/AICoverGen
-cd AICoverGen
+git clone https://github.com/unchCrew/extension_AICoverGen
+cd extension_AICoverGen
 pip install -r requirements.txt
 ```
 
@@ -142,21 +142,21 @@ Once you see `Running on local URL: http://127.0.0.1:7860`, click the link to ac
 2. Place the `.pth` and optional `.index` files in a new folder under `rvc_models`.
 3. Ensure each folder contains only one `.pth` and one `.index` file. Example structure:
 
+The directory structure should look something like this:
 ```
-â”œâ”€â”€ rvc_models
-â”‚   â”œâ”€â”€ John
-â”‚   â”‚   â”œâ”€â”€ JohnV2.pth
-â”‚   â”‚   â””â”€â”€ added_IVF2237_Flat_nprobe_1_v2.index
-â”‚   â”œâ”€â”€ May
-â”‚   â”‚   â”œâ”€â”€ May.pth
-â”‚   â”‚   â””â”€â”€ added_IVF2237_Flat_nprobe_1_v2.index
-â”‚   â”œâ”€â”€ MODELS.txt
-â”‚   â””â”€â”€ hubert_base.pt
-â”œâ”€â”€ mdxnet_models
-â”œâ”€â”€ song_output
-â””â”€â”€ src
-```
-
+├── rvc_models
+│   ├── John
+│   │   ├── JohnV2.pth
+│   │   └── added_IVF2237_Flat_nprobe_1_v2.index
+│   ├── May
+│   │   ├── May.pth
+│   │   └── added_IVF2237_Flat_nprobe_1_v2.index
+│   ├── MODELS.txt
+│   └── hubert_base.pt
+├── mdxnet_models
+├── song_output
+└── src
+ ```
 ### Running the Pipeline via CLI
 
 Run the pipeline with:
@@ -191,8 +191,9 @@ python src/main.py -i SONG_INPUT -dir RVC_DIRNAME -p PITCH_CHANGE [options]
 
 Run AICoverGen on Google Colab for GPU-free processing:
 
-- **WebUI Version**: [Open in Colab](https://colab.research.google.com/github/SociallyIneptWeeb/AICoverGen/blob/main/AICoverGen_colab.ipynb)
-- **No-UI Version** (for Colab disconnect issues): [Open in Colab](https://colab.research.google.com/github/ardha27/AICoverGen-NoUI-Colab/blob/main/CoverGen_No_UI.ipynb)
+- **WebUI Version**: [Open in Colab](https://colab.research.google.com/github/TheNeodev/Notebook/blob/main/AICoverGen_colab.ipynb)
+
+- **NoUI Version**: Will added comming soon...
 
 To update in Colab:
 1. Click **Runtime** > **Disconnect and delete runtime**.
