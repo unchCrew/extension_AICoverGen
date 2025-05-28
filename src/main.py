@@ -133,8 +133,11 @@ def get_file_hash(filepath):
     return file_hash.hexdigest()[:11]
 
 def show_progress(message, percent, is_webui, progress=None):
-    if is_webui and progress:
-        progress(percent, desc=message)
+    if is_webui and progress is not None:
+        try:
+            progress(percent, desc=message)
+        except (IndexError, AttributeError):
+            print(f"[WebUI Progress Error] {message} ({percent*100:.0f}%)")
     else:
         print(message)
 
