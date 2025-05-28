@@ -30,3 +30,4 @@ torchfcpe
 tqdm
 yt_dlp
 sox
+matplotlib==3.7.2
