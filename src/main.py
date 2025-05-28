@@ -7,7 +7,7 @@ import shlex
 import subprocess
 from contextlib import suppress
 from urllib.parse import urlparse, parse_qs
-
+from huggingface_hub import hf_hub_download
 import gradio as gr
 import librosa
 import numpy as np
@@ -17,6 +17,7 @@ import yt_dlp
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
 from pedalboard.io import AudioFile
 from pydub import AudioSegment
+from my_utils import download_rmvpe
 
 from mdx import run_mdx
 from rvc import Config, load_hubert, get_vc, rvc_infer
@@ -26,6 +27,36 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
 output_dir = os.path.join(BASE_DIR, 'song_output')
+hubert_path = ""
+
+
+def get_hubert_path():
+    global hubert_path
+
+    if hubert_path != "":
+        return hubert_path
+
+    else:
+        hubert_path = hf_hub_download(
+            repo_id="lj1995/VoiceConversionWebUI", filename=f"{rvc_models_dir}/hubert_base.pt"
+        )
+        return hubert_path
+
+
+
+def download_rmvpe():
+    local_dir = os.environ.get("rmvpe_root", rvc_models_dir)
+    if not os.path.exists(os.path.join(local_dir, "rmvpe.pt")):
+        print("Downloading rmvpe")
+        file = hf_hub_download(
+            repo_id="lj1995/VoiceConversionWebUI",
+            filename="rmvpe.pt",
+            local_dir=local_dir,
+            local_dir_use_symlinks=False,
+        )
+        print(f"RMVPE downloaded to {os.environ.get('rmvpe_root')}")
+        return file
+
 
 
 def get_youtube_video_id(url, ignore_playlist=True):
@@ -194,7 +225,7 @@ def voice_change(voice_model, vocals_path, output_path, pitch_change, f0_method,
     rvc_model_path, rvc_index_path = get_rvc_model(voice_model, is_webui)
     device = 'cuda:0'
     config = Config(device, True)
-    hubert_model = load_hubert(device, config.is_half, os.path.join(rvc_models_dir, 'hubert_base.pt'))
+    hubert_model = load_hubert(device, config.is_half, get_hubert_path())
     cpt, version, net_g, tgt_sr, vc = get_vc(device, config.is_half, config, rvc_model_path)
 
     # convert main vocals
@@ -247,6 +278,7 @@ def song_cover_pipeline(song_input, voice_model, pitch_change, keep_files,
         with open(os.path.join(mdxnet_models_dir, 'model_data.json')) as infile:
             mdx_model_params = json.load(infile)
 
+        download_rmvpe()
         # if youtube url
         if urlparse(song_input).scheme == 'https':
             input_type = 'yt'
