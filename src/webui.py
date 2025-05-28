@@ -4,7 +4,7 @@ import shutil
 import urllib.request
 import zipfile
 from argparse import ArgumentParser
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from pathlib import Path
 import gradio as gr
 from main import song_cover_pipeline
@@ -73,7 +73,7 @@ def extract_zip(extraction_folder: Path, zip_path: Path, progress: gr.Progress =
 
     # Move files to extraction folder root
     if model_filepath:
-        model_filepath.rename(extraction_folder / model filepath.name)
+        model_filepath.rename(extraction_folder / model_filepath.name)
     if index_filepath:
         index_filepath.rename(extraction_folder / index_filepath.name)
 
@@ -125,6 +125,46 @@ def upload_local_model(zip_path: str, dir_name: str, progress: gr.Progress = gr.
     except Exception as e:
         raise gr.Error(f"Upload failed: {str(e)}")
 
+def filter_available_public_models(public_models: Dict, local_models: List[str]) -> Tuple[List[List[str]], List[str]]:
+    """
+    Filter public models to exclude locally installed models and prepare table data.
+
+    Args:
+        public_models: Dictionary containing public models data, with a "voice_models" key.
+        local_models: List of locally installed model names.
+
+    Returns:
+        Tuple containing:
+        - List of model data [name, description, credit, url, tags] for display.
+        - List of available tags.
+
+    Raises:
+        KeyError: If 'voice_models' or required model fields are missing.
+        TypeError: If input types are incorrect.
+    """
+    if not isinstance(public_models, dict) or "voice_models" not in public_models:
+        raise gr.Error("Invalid public models data: 'voice_models' key missing.")
+    if not isinstance(local_models, list):
+        raise TypeError("local_models must be a list of strings.")
+
+    local_models_set = set(local_models)
+    models_table = []
+    
+    for model in public_models["voice_models"]:
+        if not all(key in model for key in ["name", "description", "credit", "url", "tags"]):
+            continue
+        if model["name"] not in local_models_set:
+            models_table.append([
+                model["name"],
+                model["description"],
+                model["credit"],
+                model["url"],
+                ", ".join(model["tags"])
+            ])
+
+    tags = list(public_models.get("tags", {}).keys())
+    return models_table, tags
+
 def filter_models(tags: List[str], query: str, public_models: dict) -> List[List[str]]:
     """Filter public models based on tags and search query."""
     models_table = []
@@ -155,8 +195,8 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
                     pitch = gr.Slider(-3, 3, value=0, step=1, label="Vocal Pitch (Octaves)", info="1 for male-to-female, -1 for vice-versa")
                     pitch_all = gr.Slider(-12, 12, value=0, step=1, label="Overall Pitch (Semitones)", info="Adjusts vocals and instrumentals")
 
-            show_file_upload_button.click(swap_visibility, inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
-            show_yt_link_button.click(swap_visibility, inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
+            show_file_upload_button.click(lambda state: (not state, state, "", None), inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
+            show_yt_link_button.click(lambda state: (not state, state, "", None), inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
             song_input_file.upload(lambda file: (file.name, file.name), inputs=[song_input_file], outputs=[local_file, song_input])
 
         with gr.Accordion("Voice Conversion Options", open=False):
@@ -209,7 +249,7 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
         )
     return rvc_model, ai_cover
 
-def create_download_model_tab(voice_models: List[str], public_models: dict) -> gr.Blocks:
+def create_download_model_tab(voice_models: List[str], public_models: dict) -> None:
     """Create the Download Model tab for the Gradio UI."""
     with gr.Tab("Download Model"):
         with gr.Tabs():
@@ -234,15 +274,14 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> g
                 pub_model_name = gr.Textbox(label="Model Name")
                 download_pub_btn = gr.Button("🌐 Download", variant="primary")
                 pub_dl_output_message = gr.Markdown()
-                filter_tags = gr.CheckboxGroup(label="Filter by Tags", choices=list(public_models["tags"].keys()))
+                filter_tags = gr.CheckboxGroup(label="Filter by Tags")
                 search_query = gr.Textbox(label="Search Models")
                 load_public_models_button = gr.Button("Load Public Models", variant="primary")
                 public_models_table = gr.DataFrame(headers=["Model Name", "Description", "Credit", "URL", "Tags"], interactive=False)
 
                 load_public_models_button.click(
-                    lambda: ([[model["name"], model["description"], model["credit"], model["url"], ", ".join(model["tags"])]
-                              for model in public_models["voice_models"] if model["name"] not in voice_models],
-                             list(public_models["tags"].keys())),
+                    filter_available_public_models,
+                    inputs=[gr.State(value=public_models), gr.State(value=voice_models)],
                     outputs=[public_models_table, filter_tags]
                 )
                 public_models_table.select(
@@ -272,11 +311,9 @@ if __name__ == "__main__":
     parser.add_argument("--listen-port", type=int, help="Server port.")
     args = parser.parse_args()
 
-    # Initialize data
     voice_models = get_current_models(RVC_MODELS_DIR)
     public_models = load_public_models_data()
 
-    # Set up Gradio interface
     with gr.Blocks(theme="Thatguy099/Sonix", title="AICoverGen WebUI") as app:
         gr.Markdown("# AICoverGen WebUI", elem_classes=["header"])
         visibility_state = gr.State(value=True)
