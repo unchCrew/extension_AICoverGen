@@ -1,33 +1,24 @@
-
-pip>=23.3; sys_platform == 'darwin'
-wheel; sys_platform == 'darwin'
-PyYAML; sys_platform == 'darwin'
-numpy==1.26.4
-requests>=2.31.0,<2.32.0
-tqdm
+requests
+mega.py
+gdown
 wget
-huggingface_hub
-deemix
-git+https://github.com/unchCrew/fairseq.git
-faiss-cpu==1.7.3
-ffmpeg-python>=0.2.0
-gradio
-lib
-librosa==0.9.1
-onnxruntime_gpu
-praat-parselmouth>=0.4.2
-pedalboard==0.7.7
-pydub==0.25.1
-pyworld==0.3.4
-scipy==1.11.1
-soundfile==0.12.1
---find-links https://download.pytorch.org/whl/torch_stable.html
-torch==2.7.0
-torchaudio==2.7.0
-torchvision
-torchcrepe==0.0.23
-torchfcpe
-tqdm
-yt_dlp
+gradio>=5.23
+librosa==0.9.2
 sox
+yt_dlp
+pedalboard
+onnxruntime-gpu>=1.17
+torch<2.6
+torchaudio<2.6
+torchvision<0.21
+fairseq==0.12.2
+ffmpeg-python>=0.2.0
+praat-parselmouth>=0.4.2
+torchcrepe==0.0.23
+pyworld==0.3.4
+faiss-cpu==1.7.3
+numpy==1.23.5
+einops
+local-attention
+tensorboardX
 matplotlib==3.7.2
