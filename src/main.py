@@ -42,15 +42,20 @@ def get_hubert_path() -> Path:
         ))
     return HUBERT_PATH
 
-def get_cookies_path() -> Path:
+def get_cookies_path() -> Optional[Path]:
     global COOKIES_PATH
     if not COOKIES_PATH:
-        COOKIES_PATH = Path(hf_hub_download(
-            repo_id="NeoPy/projects",
-            filename="config.txt",
-            local_dir=RVC_MODELS_DIR,
-            local_dir_use_symlinks=False
-        ))
+        try:
+            COOKIES_PATH = Path(hf_hub_download(
+                repo_id="NeoPy/projects",
+                filename="config.txt",
+                local_dir=RVC_MODELS_DIR,
+                local_dir_use_symlinks=False
+            ))
+            if not COOKIES_PATH.exists():
+                COOKIES_PATH = None
+        except Exception:
+            COOKIES_PATH = None
     return COOKIES_PATH
 
 def download_rmvpe() -> Path:
@@ -81,13 +86,16 @@ def get_youtube_video_id(url: str, ignore_playlist: bool = True) -> Optional[str
     return None
 
 def download_youtube(link: str, is_webui: bool) -> str:
+    cookies_path = get_cookies_path()
     ydl_opts = {
         'format': 'bestaudio',
         'outtmpl': '%(title)s.mp3',
-        'cookiesfrombrowser': ('chrome',) if get_cookies_path().exists() else None,
         'no_warnings': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
     }
+    if cookies_path:
+        ydl_opts['cookiefile'] = str(cookies_path)
+    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             result = ydl.extract_info(link, download=True)
@@ -96,7 +104,7 @@ def download_youtube(link: str, is_webui: bool) -> str:
                 raise_error(f"Failed to download audio: {output_path} does not exist.", is_webui)
             return output_path
     except Exception as e:
-        raise_error(f"YouTube download failed: {str(e)}", is_webui)
+        raise_error(f"YouTube download failed: {str(e)}. Ensure the URL is valid and the video is accessible.", is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
     if is_webui:
@@ -283,7 +291,7 @@ def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, 
             song_id = get_file_hash(song_input)
         
         song_dir = OUTPUT_DIR / song_id
-        song_dir.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+        song_dir.mkdir(parents=True, exist_ok=True)
         audio_paths = get_audio_paths(song_dir)
         
         if not audio_paths['orig'] or not keep_files:
