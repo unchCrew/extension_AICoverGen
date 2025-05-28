@@ -240,8 +240,8 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> g
                 public_models_table = gr.DataFrame(headers=["Model Name", "Description", "Credit", "URL", "Tags"], interactive=False)
 
                 load_public_models_button.click(
-                    lambda: ([model["name"], model["description"], model["credit"], model["url"], ", ".join(model["tags"])]
-                             for model in public_models["voice_models"] if model["name"] not in voice_models],
+                    lambda: ([[model["name"], model["description"], model["credit"], model["url"], ", ".join(model["tags"])]
+                              for model in public_models["voice_models"] if model["name"] not in voice_models],
                              list(public_models["tags"].keys())),
                     outputs=[public_models_table, filter_tags]
                 )
