@@ -3,7 +3,7 @@
 AICoverGen is a powerful, autonomous pipeline for generating AI-powered song covers using RVC v2 trained AI voices. Create covers from YouTube videos or local audio files with ease. Perfect for developers integrating singing functionality into AI assistants, chatbots, or VTubers, and for enthusiasts who want their favorite characters to sing their favorite songs.
 
 **Showcase**: [Watch it in action](https://www.youtube.com/watch?v=2qZuE4WM7CM)  
-**Setup Guide**: [Step-by-step video tutorial](https://www.youtube.com/watch?v=pdlhk4vVHQk)
+
 
 ![WebUI Generate](images/webui_generate.png)
 
