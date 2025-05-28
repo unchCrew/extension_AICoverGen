@@ -52,7 +52,14 @@ def get_cookies_path() -> Optional[Path]:
                 local_dir=RVC_MODELS_DIR,
                 local_dir_use_symlinks=False
             ))
-            if not COOKIES_PATH.exists():
+            # Verify if the file is a valid Netscape cookies file
+            if COOKIES_PATH.exists():
+                with COOKIES_PATH.open('r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                    # Basic check for Netscape format (lines starting with domain or comments)
+                    if not content or (not content.startswith('#') and '\t' not in content):
+                        COOKIES_PATH = None
+            else:
                 COOKIES_PATH = None
         except Exception:
             COOKIES_PATH = None
@@ -89,9 +96,12 @@ def download_youtube(link: str, is_webui: bool) -> str:
     cookies_path = get_cookies_path()
     ydl_opts = {
         'format': 'bestaudio',
-        'outtmpl': '%(title)s.mp3',
+        'outtmpl': str(OUTPUT_DIR / '%(title)s.%(ext)s'),  # Ensure output path is in OUTPUT_DIR
         'no_warnings': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
+        'writesubtitles': False,
+        'writeautomaticsub': False,
+        'no_cookies': not cookies_path,  # Disable cookies if no valid cookies file
     }
     if cookies_path:
         ydl_opts['cookiefile'] = str(cookies_path)
@@ -99,15 +109,17 @@ def download_youtube(link: str, is_webui: bool) -> str:
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             result = ydl.extract_info(link, download=True)
-            output_path = ydl.prepare_filename(result, outtmpl='%(title)s.mp3')
+            output_path = ydl.prepare_filename(result)
             if not Path(output_path).exists():
                 raise_error(f"Failed to download audio: {output_path} does not exist.", is_webui)
             return output_path
     except Exception as e:
-        raise_error(f"YouTube download failed: {str(e)}. Ensure the URL is valid and the video is accessible.", is_webui)
+        raise_error(f"YouTube download failed: {str(e)}. Ensure the URL is valid and the video is publicly accessible.", is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
-    if is_webui:
+    if
+
+ is_webui:
         raise gr.Error(message)
     raise ValueError(message)
 
