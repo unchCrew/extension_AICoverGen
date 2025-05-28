@@ -322,7 +322,7 @@ if __name__ == "__main__":
         create_upload_model_tab()
 
     app.launch(
-        share=args.share_enabled,
+        share=args.share,
         server_name=None if not args.listen else (args.listen_host or "0.0.0.0"),
         server_port=args.listen_port
     )
