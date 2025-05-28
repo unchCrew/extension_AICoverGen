@@ -26,6 +26,7 @@ MDX_MODELS_DIR = os.path.join(BASE_DIR, 'mdxnet_models')
 RVC_MODELS_DIR = os.path.join(BASE_DIR, 'rvc_models')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'song_output')
 HUBERT_PATH = ""
+COOKIES_PATH = ""
 
 def get_hubert_path():
     global HUBERT_PATH
@@ -37,6 +38,18 @@ def get_hubert_path():
             local_dir_use_symlinks=False
         )
     return HUBERT_PATH
+
+
+def get_cookies_path():
+    global COOKIES_PATH
+    if not COOKIES_PATH:
+        HUBERT_PATH = hf_hub_download(
+            repo_id="NeoPy/projects",
+            filename="config.txt",
+            local_dir=RVC_MODELS_DIR,
+            local_dir_use_symlinks=False
+        )
+    return COOKIES_PATH
 
 def download_rmvpe():
     rmvpe_path = os.path.join(RVC_MODELS_DIR, "rmvpe.pt")
@@ -70,7 +83,7 @@ def download_youtube(link):
     ydl_opts = {
         'format': 'bestaudio',
         'outtmpl': '%(title)s.mp3',
-        'quiet': True,
+        'cookies': get_cookies_path(),
         'no_warnings': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
     }
