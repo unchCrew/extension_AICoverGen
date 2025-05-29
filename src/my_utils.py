@@ -1,7 +1,7 @@
 import ffmpeg
 import numpy as np
 from huggingface_hub import hf_hub_download
-import os
+import os, gc, re
 import gradio as gr
 import requests
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
