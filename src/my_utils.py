@@ -15,7 +15,7 @@ def load_hubert_new(config, path=f"{rvc_models_dir}/hubert_base.pt"):
         suffix="",
     )
     hubert_model = models[0]
-    hubert_model = hubert_model.to(config.device)
+    hubert_model = hubert_model.to(config)
     if config.is_half:
         hubert_model = hubert_model.half()
     else:
