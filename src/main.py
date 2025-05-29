@@ -31,7 +31,7 @@ MDX_MODELS_DIR = BASE_DIR / 'mdxnet_models'
 RVC_MODELS_DIR = BASE_DIR / 'rvc_models'
 OUTPUT_DIR = BASE_DIR / 'song_output'
 HUBERT_PATH = Path('')
-COOKIES_PATAh = BASE_DIR / 'config.txt'
+COOKIES_PATH = BASE_DIR / 'config.txt'
 
 def get_hubert_path() -> Path:
     global HUBERT_PATH
