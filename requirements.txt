@@ -6,7 +6,7 @@ requests
 mega.py
 gdown
 wget
-
+matplotlib==3.7.2
 gradio
 librosa==0.9.2
 sox
