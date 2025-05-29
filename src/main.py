@@ -52,16 +52,17 @@ def get_cookies_path() -> Optional[Path]:
                 local_dir=RVC_MODELS_DIR,
                 local_dir_use_symlinks=False
             ))
-            # Verify if the file is a valid Netscape cookies file
             if COOKIES_PATH.exists():
                 with COOKIES_PATH.open('r', encoding='utf-8') as f:
                     content = f.read().strip()
-                    # Basic check for Netscape format (lines starting with domain or comments)
                     if not content or (not content.startswith('#') and '\t' not in content):
+                        print("Warning: Downloaded config.txt is not a valid Netscape cookies file. Proceeding without cookies.")
                         COOKIES_PATH = None
             else:
+                print("Warning: Cookies file not found after download. Proceeding without cookies.")
                 COOKIES_PATH = None
-        except Exception:
+        except Exception as e:
+            print(f"Warning: Failed to download cookies file: {str(e)}. Proceeding without cookies.")
             COOKIES_PATH = None
     return COOKIES_PATH
 
@@ -96,12 +97,13 @@ def download_youtube(link: str, is_webui: bool) -> str:
     cookies_path = get_cookies_path()
     ydl_opts = {
         'format': 'bestaudio',
-        'outtmpl': str(OUTPUT_DIR / '%(title)s.%(ext)s'),
+        'outtmpl': str(OUTPUT_DIR / '%(id)s_%(title)s.%(ext)s'),  # Include video ID for uniqueness
         'no_warnings': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
         'writesubtitles': False,
         'writeautomaticsub': False,
-        'no_cookies': not cookies_path,
+        'nocookiefile': not cookies_path,  # Explicitly disable cookie file handling if none provided
+        'cookiesfrombrowser': None,  # Disable browser cookie extraction
     }
     if cookies_path:
         ydl_opts['cookiefile'] = str(cookies_path)
@@ -114,7 +116,7 @@ def download_youtube(link: str, is_webui: bool) -> str:
                 raise_error(f"Failed to download audio: {output_path} does not exist.", is_webui)
             return output_path
     except Exception as e:
-        raise_error(f"YouTube download failed: {str(e)}. Ensure the URL is valid and the video is publicly accessible.", is_webui)
+        raise_error(f"YouTube download failed: {str(e)}. Ensure the URL is valid, the video is publicly accessible, or provide a valid cookies file for restricted content.", is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
     if is_webui:
@@ -369,7 +371,7 @@ if __name__ == '__main__':
     
     cover_path = song_cover_pipeline(
         args.song_input, args.rvc_dirname, args.pitch_change, args.keep_files,
-        main_gain=args.main_vol, backup_gain=args.backup_vol, inst_gain=args.inst_vol,
+        main_gain=args.main_vol, backup_gain=args.main_vol, inst_gain=args.inst_vol,
         index_rate=args.index_rate, filter_radius=args.filter_radius, rms_mix_rate=args.rms_mix_rate,
         f0_method=args.pitch_detection_algo, crepe_hop_length=args.crepe_hop_length, protect=args.protect,
         pitch_change_all=args.pitch_change_all, reverb_rm_size=args.reverb_size,
