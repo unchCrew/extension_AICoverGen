@@ -1,3 +1,7 @@
+pip>=23.3; sys_platform == 'darwin'
+wheel; sys_platform == 'darwin'
+PyYAML; sys_platform == 'darwin'
+numpy==1.26.4
 requests
 mega.py
 gdown
@@ -15,7 +19,6 @@ praat-parselmouth>=0.4.2
 torchcrepe==0.0.23
 pyworld==0.3.4
 faiss-cpu==1.7.3
-numpy==1.23.5
 tensorboardX
 noisereduce
 matplotlib==3.7.2
