@@ -14,8 +14,8 @@ import soundfile as sf
 import sox
 import yt_dlp
 from mdx import run_mdx
-from rvc import Config, load_hubert, get_vc, rvc_infer
-from pedalboard.io import AudioFile
+from rvc import Config, load_bubert, get_vc, rvc_infer
+from pydub import AudioSegment
 
 import gradio as gr
 
