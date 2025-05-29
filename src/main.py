@@ -44,29 +44,6 @@ def get_hubert_path() -> Path:
         ))
     return HUBERT_PATH
 
-def get_cookies_path() -> Optional[Path]:
-    global COOKIES_PATH
-    if not COOKIES_PATH:
-        try:
-            COOKIES_PATH = Path(hf_hub_download(
-                repo_id="NeoPy/projects",
-                filename="config.txt",
-                local_dir=RVC_MODELS_DIR,
-                local_dir_use_symlinks=False
-            ))
-            if COOKIES_PATH.exists():
-                with COOKIES_PATH.open('r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                    if not content or (not content.startswith('#') and '\t' not in content):
-                        print("Warning: Downloaded config.txt is not a valid Netscape cookies file. Proceeding without cookies.")
-                        COOKIES_PATH = None
-            else:
-                print("Warning: Cookies file not found after download. Proceeding without cookies.")
-                COOKIES_PATH = None
-        except Exception as e:
-            print(f"Warning: Failed to download cookies file: {str(e)}. Proceeding without cookies.")
-            COOKIES_PATH = None
-    return COOKIES_PATH
 
 def get_youtube_video_id(url: str) -> Optional[str]:
     """Extract video ID from a YouTube URL using yt-dlp's internal logic."""
@@ -82,7 +59,7 @@ def get_youtube_video_id(url: str) -> Optional[str]:
         return None
 
 def download_youtube(link: str, is_webui: bool) -> str:
-    cookies_path = get_cookies_path()
+    cookies_path = COOKIES_PATH
     print(f"Debug: Cookies path is {cookies_path}")
 
     # Custom YoutubeDL class to disable cookie saving
