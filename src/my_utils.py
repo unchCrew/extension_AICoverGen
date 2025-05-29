@@ -2,12 +2,26 @@ import ffmpeg
 import numpy as np
 from huggingface_hub import hf_hub_download
 import os
+import gradio as gr
 import requests
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
 from pedalboard.io import AudioFile
+
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
+
+def raise_exception(error_msg, is_webui):
+    if is_webui:
+        raise gr.Error(error_msg)
+    raise Exception(error_msg)
+
+
+def display_progress(message, percent, is_webui, progress=None):
+    if is_webui:
+        progress(percent, desc=message)
+    print("AICoverGen:" + message)
 
 
 
