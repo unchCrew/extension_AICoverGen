@@ -7,7 +7,7 @@ import shlex
 import subprocess
 from contextlib import suppress
 from urllib.parse import urlparse, parse_qs
-from my_utils import get_and_load_hubert_new, download_rmvpe
+from my_utils import get_and_load_hubert_new, download_rmvpe, load_mdx
 import gradio as gr
 import librosa
 import numpy as np
@@ -178,6 +178,7 @@ def preprocess_song(song_input, mdx_model_params, song_id, is_webui, input_type,
     song_output_dir = os.path.join(output_dir, song_id)
     orig_song_path = convert_to_stereo(orig_song_path)
 
+    load_mdx()
     display_progress('[~] Separating Vocals from Instrumental...', 0.1, is_webui, progress)
     vocals_path, instrumentals_path = run_mdx(mdx_model_params, song_output_dir, os.path.join(mdxnet_models_dir, 'UVR-MDX-NET-Voc_FT.onnx'), orig_song_path, denoise=True, keep_orig=keep_orig)
 
