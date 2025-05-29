@@ -5,7 +5,7 @@ import json
 import os
 import shlex
 import subprocess
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 from contextlib import suppress
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -21,6 +21,9 @@ from pedalboard.io import AudioFile
 from pydub import AudioSegment
 from http.cookiejar import MozillaCookieJar
 from io import StringIO
+
+from mdx import run_mdx
+from rvc import Config, load_hubert, get_vc, rvc_infer
 
 # Constants
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -66,46 +69,21 @@ def get_cookies_path() -> Optional[Path]:
     return COOKIES_PATH
 
 def get_youtube_video_id(url: str) -> Optional[str]:
-    """Extract video ID from various YouTube URL formats."""
+    """Extract video ID from a YouTube URL using yt-dlp's internal logic."""
     try:
-        parsed_url = urlparse(url)
-        hostname = parsed_url.hostname.lower() if parsed_url.hostname else ''
-        
-        # Handle standard YouTube URLs (e.g., https://www.youtube.com/watch?v=VIDEO_ID)
-        if hostname in ('www.youtube.com', 'youtube.com'):
-            if parsed_url.path == '/watch':
-                query_params = parse_qs(parsed_url.query)
-                if 'v' in query_params:
-                    return query_params['v'][0]
-            # Handle embed URLs (e.g., https://www.youtube.com/embed/VIDEO_ID)
-            elif parsed_url.path.startswith('/embed/'):
-                return parsed_url.path.split('/embed/')[1].split('/')[0]
-            # Handle playlist URLs (extract first video ID)
-            elif parsed_url.path.startswith('/playlist') or 'list' in parse_qs(parsed_url.query):
-                with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True}) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    if info.get('entries') and len(info['entries']) > 0:
-                        return info['entries'][0].get('id')
-        
-        # Handle shortened youtu.be URLs (e.g., https://youtu.be/VIDEO_ID)
-        elif hostname == 'youtu.be':
-            return parsed_url.path.lstrip('/')
-        
-        print(f"Debug: Invalid or unsupported YouTube URL: {url}")
-        return None
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if 'entries' in info:  # Playlist case
+                print("Warning: Playlist URL detected. Using the first video.")
+                return info['entries'][0]['id']
+            return info['id']
     except Exception as e:
-        print(f"Debug: Error parsing YouTube URL {url}: {str(e)}")
+        print(f"Debug: Failed to extract video ID: {str(e)}")
         return None
 
-def download_youtube(link: str, is_webui: bool, progress: Optional[gr.Progress] = None) -> str:
-    """Download audio from a YouTube URL with robust handling of various formats."""
+def download_youtube(link: str, is_webui: bool) -> str:
     cookies_path = get_cookies_path()
     print(f"Debug: Cookies path is {cookies_path}")
-
-    # Validate YouTube URL
-    video_id = get_youtube_video_id(link)
-    if not video_id:
-        raise_error("Invalid YouTube URL. Please provide a valid YouTube video URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID or https://youtu.be/VIDEO_ID).", is_webui)
 
     # Custom YoutubeDL class to disable cookie saving
     class NoCookieYoutubeDL(yt_dlp.YoutubeDL):
@@ -120,59 +98,48 @@ def download_youtube(link: str, is_webui: bool, progress: Optional[gr.Progress] 
             else:
                 super()._load_cookies(*args, **kwargs)
 
-    # yt-dlp options with enhanced format selection and progress hooks
+    # Configure yt-dlp options
     ydl_opts = {
-        'format': 'bestaudio[ext=mp3]/bestaudio[ext=m4a]/bestaudio/best',  # Prioritize mp3, then m4a, then any audio
-        'outtmpl': str(OUTPUT_DIR / f'{video_id}_%(title)s.%(ext)s'),  # Unique filename with video ID
-        'quiet': False,
+        'format': 'bestaudio/best',  # Prefer best audio quality
+        'outtmpl': str(OUTPUT_DIR / '%(id)s_%(title)s.%(ext)s'),  # Unique filename
         'no_warnings': True,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',  # Try mp3 first
-            'preferredquality': '192',  # Target quality
+            'preferredcodec': 'wav',  # Use WAV for compatibility
+            'preferredquality': '192',
         }],
         'writesubtitles': False,
         'writeautomaticsub': False,
-        'no_cookies': True,  # Disable all cookie handling by default
+        'no_cookies': True,  # Disable all cookie handling unless provided
         'cookiesfrombrowser': None,  # No browser cookies
-        'cookiefile': str(cookies_path) if cookies_path else None,  # Only if valid
-        'progress_hooks': [lambda d: show_progress(
-            f"Downloading YouTube audio ({d.get('status', 'unknown')})...",
-            min(d.get('_percent_str', '0%').strip('%'), 0.1) if d.get('status') == 'downloading' else 0.05,
-            is_webui,
-            progress
-        )],
-        'noplaylist': True,  # Only download single video, not playlist
-        'retries': 3,  # Retry on failure
-        'fragment_retries': 3,
-        'ignoreerrors': False,
+        'cookiefile': str(cookies_path) if cookies_path else None,  # Use cookies if available
+        'noplaylist': True,  # Download only the first video if a playlist
+        'geo_bypass': True,  # Attempt to bypass geo-restrictions
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     }
-    
+
     try:
         print(f"Debug: Creating output directory {OUTPUT_DIR}")
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        print(f"Debug: Starting download for URL {link} (Video ID: {video_id})")
+        print(f"Debug: Starting download for URL {link}")
+
         with NoCookieYoutubeDL(ydl_opts) as ydl:
-            result = ydl.extract_info(link, download=True)
-            output_path = ydl.prepare_filename(result)
-            # Handle cases where the extension might differ (e.g., m4a instead of mp3)
-            possible_extensions = ['.mp3', '.m4a', '.wav']
-            for ext in possible_extensions:
-                test_path = Path(output_path).with_suffix(ext)
-                if test_path.exists():
-                    output_path = str(test_path)
-                    break
+            info = ydl.extract_info(link, download=True)
+            output_path = ydl.prepare_filename(info)
+            # Ensure the output path has the correct extension (WAV)
+            output_path = output_path.rsplit('.', 1)[0] + '.wav'
             print(f"Debug: Download completed, output path is {output_path}")
+
             if not Path(output_path).exists():
                 raise_error(f"Failed to download audio: {output_path} does not exist.", is_webui)
             return output_path
     except yt_dlp.utils.DownloadError as e:
-        error_msg = f"YouTube download failed: {str(e)}. Possible reasons: video is private, region-locked, age-restricted, or unavailable. Ensure the URL is valid and publicly accessible. For restricted videos, upload a valid Netscape cookies file to /content/HRVC/cookies.txt and set COOKIES_PATH in main.py."
+        error_msg = f"YouTube download failed: {str(e)}. Possible reasons: Invalid URL, private video, region-restricted content, or unsupported format. Ensure the URL is valid (e.g., https://www.youtube.com/watch?v=VIDEO_ID or https://youtu.be/VIDEO_ID) and the video is publicly accessible. For restricted videos, upload a valid Netscape cookies file to {COOKIES_PATH}."
         print(f"Debug: Download error: {error_msg}")
         raise_error(error_msg, is_webui)
     except Exception as e:
-        error_msg = f"YouTube download failed: {str(e)}. Please check the URL and try again."
-        print(f"Debug: General error: {error_msg}")
+        error_msg = f"Unexpected error during YouTube download: {str(e)}. Please check the URL and try again."
+        print(f"Debug: Unexpected error: {error_msg}")
         raise_error(error_msg, is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
@@ -253,7 +220,7 @@ def preprocess_song(song_input: str, mdx_model_params: dict, song_id: str, is_we
     song_dir.mkdir(parents=True, exist_ok=True)
     
     show_progress('Preparing audio input...', 0, is_webui, progress)
-    orig_song_path = download_youtube(song_input.split('&')[0], is_webui, progress) if input_type == 'yt' else song_input
+    orig_song_path = download_youtube(song_input, is_webui) if input_type == 'yt' else song_input
     if not Path(orig_song_path).exists():
         raise_error(f"Audio file {orig_song_path} not found after download.", is_webui)
     orig_song_path = to_stereo(orig_song_path)
@@ -326,11 +293,15 @@ def add_audio_effects(audio_path: str, reverb_rm_size: float, reverb_wet: float,
 
 def combine_audio(audio_paths: list, output_path: str, main_gain: float, backup_gain: float, inst_gain: float, output_format: str) -> None:
     main_vocal = AudioSegment.from_wav(audio_paths[0]) - 4 + main_gain
-    backup_vocal = AudioSegment.from_wav(audio_paths[1]) - 6 + backup_gain
+    backup_vocal = AudioSegment.from_wav(audio_paths[1]) - 6 + backup_gain if audio_paths[1] else AudioSegment.silent(duration=len(main_vocal))
     instrumental = AudioSegment.from_wav(audio_paths[2]) - 7 + inst_gain
     main_vocal.overlay(backup_vocal).overlay(instrumental).export(output_path, format=output_format)
     if not Path(output_path).exists():
         raise ValueError(f"Failed to combine audio: {output_path} does not exist.")
+
+def download_rmvpe():
+    """Placeholder for downloading RMVPE model (implement as needed)."""
+    pass  # Add actual implementation if required
 
 def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, keep_files: bool, is_webui: bool = False, 
                        main_gain: float = 0, backup_gain: float = 0, inst_gain: float = 0, index_rate: float = 0.5, 
@@ -353,7 +324,7 @@ def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, 
         if input_type == 'yt':
             song_id = get_youtube_video_id(song_input)
             if not song_id:
-                raise_error("Invalid YouTube URL.", is_webui)
+                raise_error("Invalid YouTube URL. Please provide a valid YouTube video URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID or https://youtu.be/VIDEO_ID).", is_webui)
             print(f"Debug: YouTube song ID: {song_id}")
         else:
             song_input = song_input.strip()
@@ -390,37 +361,39 @@ def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, 
         if pitch_change_all != 0:
             show_progress('Applying overall pitch change...', 0.85, is_webui, progress)
             inst_path = pitch_shift(inst_path, pitch_change_all)
-            backup_vocals_path = pitch_shift(backup_vocals_path, pitch_change_all)
+            backup_vocals_path = pitch_shift(backup_vocals_path, pitch_change_all) if backup_vocals_path else backup_vocals_path
             
-        
         show_progress('Combining audio tracks...', 0.9, is_webui, progress)
         print(f"Debug: Combining audio tracks: {ai_vocals_mixed}, {backup_vocals_path}, {inst_path}")
-        combine_audio([ai_vocals_mixed], [backup_vocals_path], [inst_path], str(ai_cover_path), 
+        combine_audio([ai_vocals_mixed, backup_vocals_path, inst_path], str(ai_cover_path), 
                      main_gain, backup_gain, inst_gain, output_format)
         
         if not keep_files:
             print("Debug: Cleaning up intermediate files")
             show_progress('Cleaning up intermediate files...', 0.95, is_webui, progress)
-            for file in [audio_paths['vocals'], audio_paths['main_vocals'], ai_vocals_mixed]] + \
-                        [[inst_path], [backup_vocals_path] if pitch_change_all != 0 else []]:
+            for file in [audio_paths['vocals'], audio_paths['main_vocals'], audio_paths['main_vocals_dereverb'], ai_vocals_mixed,
+                        inst_path if pitch_change_all != 0 else None, backup_vocals_path if pitch_change_all != 0 else None]:
                 if file and Path(file).exists():
-                    Path(file).unlink()
-                    print(f"Debug info: Deleted file {file}")
+                    try:
+                        Path(file).unlink()
+                        print(f"Debug: Deleted file {file}")
+                    except Exception as e:
+                        print(f"Debug: Failed to delete file {file}: {str(e)}")
         
         show_progress('AI cover generated successfully!', 1.0, is_webui, progress)
         print(f"Debug: Final cover path: {ai_cover_path}")
-        return str(ai_cover_path))
+        return str(ai_cover_path)
     
     except Exception as e:
         print(f"Debug: Pipeline error: {str(e)}")
-        raise_error(str(e)), is_webui)
+        raise_error(str(e), is_webui)
 
 if __name__ == '__main__':
     print("Debug: Parsing command-line arguments")
-    parser = argparse.ArgumentParser(description=('Generate an AI cover song.', formatter_class=argparse.ArgumentDefaultsHelpFormatter))
+    parser = argparse.ArgumentParser(description='Generate an AI cover song.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-i', '--song-input', type=str, required=True, help='YouTube URL or path to local mp3/wav file')
     parser.add_argument('-d', '--rvc-dirname', type=str, required=True, help='Folder name in rvc_models containing the RVC model')
-    parser.add_argument('-p', '--pitch', '--change', type=int, required=True, help='Pitch change for AI vocals (octaves, e.g., 1 for male to female)')
+    parser.add_argument('-p', '--pitch', type=float, required=True, help='Pitch change for AI vocals (octaves, e.g., 1 for male to female)')
     parser.add_argument('-k', '--keep-files', action='store_true', help='Keep intermediate audio files')
     parser.add_argument('-ir', '--index-rate', type=float, default=0.5, help='Timbre retention (0 to 1)')
     parser.add_argument('-fr', '--filter-radius', type=int, default=3, help='Median filter radius (0 to 7)')
@@ -428,10 +401,10 @@ if __name__ == '__main__':
     parser.add_argument('-palgo', '--pitch-detection-algo', type=str, default='rmvpe', choices=['rmvpe', 'mangio-crepe'], help='Pitch detection algorithm')
     parser.add_argument('-hop', '--crepe-hop-length', type=int, default=128, help='Pitch check frequency for mangio-crepe (ms)')
     parser.add_argument('-pro', '--protect', type=float, default=0.33, help='Protect voiceless consonants (0 to 0.5)')
-    parser.add_argument('-mv', '--main-vol', type=int, default=0, help='Main vocals volume change (dB)')
-    parser.add_argument('-bv', '--backup-vol', type=int, default=0, help='Backup vocals volume change (dB)')
-    parser.add_argument('-iv', '--inst-vol', type=int, default=0, help='Instrumental volume change (dB)')
-    parser.add_argument('-pall', '--pitch-change-all', type=int, default=0, help='Pitch change for all tracks (octaves)')
+    parser.add_argument('-mv', '--main-vol', type=float, default=0, help='Main vocals volume change (dB)')
+    parser.add_argument('-bv', '--backup-vol', type=float, default=0, help='Backup vocals volume change (dB)')
+    parser.add_argument('-iv', '--inst-vol', type=float, default=0, help='Instrumental volume change (dB)')
+    parser.add_argument('-pall', '--pitch-change-all', type=float, default=0, help='Pitch change for all tracks (octaves)')
     parser.add_argument('-rsize', '--reverb-size', type=float, default=0.15, help='Reverb room size (0 to 1)')
     parser.add_argument('-rwet', '--reverb-wetness', type=float, default=0.2, help='Reverb wet level (0 to 1)')
     parser.add_argument('-rdry', '--reverb-dryness', type=float, default=0.8, help='Reverb dry level (0 to 1)')
@@ -441,10 +414,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     print(f"Debug: Running pipeline with song_input={args.song_input}, voice_model={args.rvc_dirname}")
-    cover_path = parse_args_cover_pipeline(
+    cover_path = song_cover_pipeline(
         args.song_input, 
         args.rvc_dirname, 
-        args.pitch_change, 
+        args.pitch, 
         args.keep_files,
         main_gain=args.main_vol, 
         backup_gain=args.backup_vol, 
