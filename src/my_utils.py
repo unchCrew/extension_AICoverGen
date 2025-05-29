@@ -3,6 +3,8 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 import os
 import requests
+from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
+from pedalboard.io import AudioFile
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
@@ -86,3 +88,27 @@ def load_audio(file, sr):
         raise RuntimeError(f"Failed to load audio: {e}")
 
     return np.frombuffer(out, np.float32).flatten()
+
+
+
+def add_audio_effects(audio_path, reverb_rm_size, reverb_wet, reverb_dry, reverb_damping):
+    output_path = f'{os.path.splitext(audio_path)[0]}_mixed.wav'
+
+    # Initialize audio effects plugins
+    board = Pedalboard(
+        [
+            HighpassFilter(),
+            Compressor(ratio=4, threshold_db=-15),
+            Reverb(room_size=reverb_rm_size, dry_level=reverb_dry, wet_level=reverb_wet, damping=reverb_damping)
+         ]
+    )
+
+    with AudioFile(audio_path) as f:
+        with AudioFile(output_path, 'w', f.samplerate, f.num_channels) as o:
+            # Read one second of audio at a time, until the file is empty:
+            while f.tell() < f.frames:
+                chunk = f.read(int(f.samplerate))
+                effected = board(chunk, f.samplerate, reset=False)
+                o.write(effected)
+
+    return output_path
