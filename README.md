@@ -80,14 +80,6 @@ cd extension_AICoverGen
 pip install -r requirements.txt
 ```
 
-### Download Required Models
-
-Download the MDXNET vocal separation and Hubert base models:
-
-```bash
-python src/download_models.py
-```
-
 ## Usage with WebUI
 
 Launch the WebUI:
