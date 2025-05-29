@@ -19,6 +19,8 @@ import yt_dlp
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
 from pedalboard.io import AudioFile
 from pydub import AudioSegment
+from http.cookiejar import MozillaCookieJar
+from io import StringIO
 
 from mdx import run_mdx
 from rvc import Config, load_hubert, get_vc, rvc_infer
@@ -29,7 +31,7 @@ MDX_MODELS_DIR = BASE_DIR / 'mdxnet_models'
 RVC_MODELS_DIR = BASE_DIR / 'rvc_models'
 OUTPUT_DIR = BASE_DIR / 'song_output'
 HUBERT_PATH = Path('')
-COOKIES_PATH = Path('')
+COOKIES_PATAh = BASE_DIR / 'config.txt'
 
 def get_hubert_path() -> Path:
     global HUBERT_PATH
@@ -66,63 +68,58 @@ def get_cookies_path() -> Optional[Path]:
             COOKIES_PATH = None
     return COOKIES_PATH
 
-def download_rmvpe() -> Path:
-    rmvpe_path = RVC_MODELS_DIR / "rmvpe.pt"
-    if not rmvpe_path.exists():
-        print("Downloading rmvpe model...")
-        rmvpe_path = Path(hf_hub_download(
-            repo_id="lj1995/VoiceConversionWebUI",
-            filename="rmvpe.pt",
-            local_dir=RVC_MODELS_DIR,
-            local_dir_use_symlinks=False
-        ))
-        print(f"RMVPE downloaded to {rmvpe_path}")
-    return rmvpe_path
-
-def get_youtube_video_id(url: str, ignore_playlist: bool = True) -> Optional[str]:
-    query = urlparse(url)
-    if query.hostname == 'youtu.be':
-        return query.path[1:] if query.path[1:] != 'watch' else parse_qs(query.query).get('v', [None])[0]
-    
-    if query.hostname in {'www.youtube.com', 'youtube.com', 'music.youtube.com'}:
-        if not ignore_playlist:
-            return parse_qs(query.query).get('list', [None])[0]
-        if query.path == '/watch':
-            return parse_qs(query.query).get('v', [None])[0]
-        if query.path.startswith(('/watch/', '/embed/', '/v/')):
-            return query.path.split('/')[2]
-    return None
-
 def download_youtube(link: str, is_webui: bool) -> str:
     cookies_path = get_cookies_path()
+    print(f"Debug: Cookies path is {cookies_path}")
+
+    # Custom YoutubeDL class to disable cookie saving
+    class NoCookieYoutubeDL(yt_dlp.YoutubeDL):
+        def save_cookies(self):
+            print("Debug: Skipping cookie saving")
+            pass  # Override to prevent saving cookies
+
+        def _load_cookies(self, *args, **kwargs):
+            if not self.params.get('cookiefile'):
+                print("Debug: Using in-memory cookie jar")
+                self.cookiejar = MozillaCookieJar(StringIO(""))  # In-memory cookie jar
+            else:
+                super()._load_cookies(*args, **kwargs)
+
     ydl_opts = {
         'format': 'bestaudio',
-        'outtmpl': str(OUTPUT_DIR / '%(id)s_%(title)s.%(ext)s'),  # Unique filename with video ID
+        'outtmpl': str(OUTPUT_DIR / '%(id)s_%(title)s.%(ext)s'),  # Unique filename
         'no_warnings': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
         'writesubtitles': False,
         'writeautomaticsub': False,
-        'no_cookies': True,  # Disable all cookie handling by default
-        'cookiesfrombrowser': None,  # Disable browser cookie extraction
-        'cookiefile': str(cookies_path) if cookies_path else None,  # Only use cookiefile if valid
+        'no_cookies': True,  # Disable all cookie handling
+        'cookiesfrombrowser': None,  # No browser cookies
+        'cookiefile': str(cookies_path) if cookies_path else None,  # Only if valid
     }
     
     try:
-        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)  # Ensure output directory exists
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        print(f"Debug: Creating output directory {OUTPUT_DIR}")
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        print(f"Debug: Starting download for URL {link}")
+        with NoCookieYoutubeDL(ydl_opts) as ydl:
             result = ydl.extract_info(link, download=True)
             output_path = ydl.prepare_filename(result)
+            print(f"Debug: Download completed, output path is {output_path}")
             if not Path(output_path).exists():
                 raise_error(f"Failed to download audio: {output_path} does not exist.", is_webui)
             return output_path
     except Exception as e:
-        raise_error(f"YouTube download failed: {str(e)}. Ensure the URL is valid and the video is publicly accessible. For restricted videos, upload a valid Netscape cookies file and set COOKIES_PATH.", is_webui)
+        error_msg = f"YouTube download failed: {str(e)}. Ensure the URL is a valid YouTube link (e.g., https://www.youtube.com/watch?v=VIDEO_ID) and the video is publicly accessible. For restricted videos, upload a valid Netscape cookies file to /content/HRVC/cookies.txt and set COOKIES_PATH in main.py."
+        print(f"Debug: Error occurred: {error_msg}")
+        raise_error(error_msg, is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
     if is_webui:
         raise gr.Error(message)
     else:
         raise ValueError(message)
+
+# ... (rest of the file remains unchanged)
 
 def get_rvc_model(voice_model: str, is_webui: bool) -> Tuple[str, str]:
     model_dir = RVC_MODELS_DIR / voice_model
@@ -297,25 +294,32 @@ def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, 
             song_id = get_youtube_video_id(song_input)
             if not song_id:
                 raise_error("Invalid YouTube URL.", is_webui)
+            print(f"Debug: YouTube song ID: {song_id}")
         else:
-            song_input = song_input.strip('"')
+            song_input = song_input.strip()
             if not Path(song_input).exists():
                 raise_error(f"File {song_input} does not exist.", is_webui)
             song_id = get_file_hash(song_input)
+            print(f"Debug: Local song ID: {song_id}")
         
-        song_dir = OUTPUT_DIR / song_id
+        song_dir = OUTPUT_DIR / str(song_id)
         song_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Debug: Song directory: {song_dir}")
         audio_paths = get_audio_paths(song_dir)
         
         if not audio_paths['orig'] or not keep_files:
-            audio_paths = preprocess_song(song_input, mdx_model_params, song_id, is_webui, input_type, progress)
+            print("Debug: Preprocessing song")
+            audio_paths = preprocess_song(song_input, mdx_model_params, str(song_id), is_webui, input_type, progress)
         
         pitch_change = pitch_change * 12 + pitch_change_all
         ai_vocals_path = song_dir / f"{Path(audio_paths['orig']).stem}_{voice_model}_p{pitch_change}_i{index_rate}_fr{filter_radius}_rms{rms_mix_rate}_pro{protect}_{f0_method}{'' if f0_method != 'mangio-crepe' else f'_{crepe_hop_length}'}.wav"
         ai_cover_path = song_dir / f"{Path(audio_paths['orig']).stem} ({voice_model} Ver).{output_format}"
+        print(f"Debug: AI vocals path: {ai_vocals_path}")
+        print(f"Debug: AI cover path: {ai_cover_path}")
         
         if not ai_vocals_path.exists():
-            voice_change(voice_model, audio_paths['main_vocals_dereverb'], str(ai_vocals_path), pitch_change,
+            print("Debug: Starting voice change")
+            voice_change(voice_model, str(audio_paths['main_vocals_dereverb']), str(ai_vocals_path), pitch_change,
                         f0_method, index_rate, filter_radius, rms_mix_rate, protect, crepe_hop_length, is_webui)
         
         show_progress('Applying audio effects to vocals...', 0.8, is_webui, progress)
@@ -327,32 +331,39 @@ def song_cover_pipeline(song_input: str, voice_model: str, pitch_change: float, 
             show_progress('Applying overall pitch change...', 0.85, is_webui, progress)
             inst_path = pitch_shift(inst_path, pitch_change_all)
             backup_vocals_path = pitch_shift(backup_vocals_path, pitch_change_all)
+            
         
         show_progress('Combining audio tracks...', 0.9, is_webui, progress)
-        combine_audio([ai_vocals_mixed, backup_vocals_path, inst_path], str(ai_cover_path),
+        print(f"Debug: Combining audio tracks: {ai_vocals_mixed}, {backup_vocals_path}, {inst_path}")
+        combine_audio([ai_vocals_mixed], [backup_vocals_path], [inst_path], str(ai_cover_path), 
                      main_gain, backup_gain, inst_gain, output_format)
         
         if not keep_files:
+            print("Debug: Cleaning up intermediate files")
             show_progress('Cleaning up intermediate files...', 0.95, is_webui, progress)
-            for file in [audio_paths['vocals'], audio_paths['main_vocals'], ai_vocals_mixed] + \
-                       ([inst_path, backup_vocals_path] if pitch_change_all != 0 else []):
+            for file in [audio_paths['vocals'], audio_paths['main_vocals'], ai_vocals_mixed]] + \
+                        [[inst_path], [backup_vocals_path] if pitch_change_all != 0 else []]:
                 if file and Path(file).exists():
                     Path(file).unlink()
+                    print(f"Debug info: Deleted file {file}")
         
         show_progress('AI cover generated successfully!', 1.0, is_webui, progress)
-        return str(ai_cover_path)
+        print(f"Debug: Final cover path: {ai_cover_path}")
+        return str(ai_cover_path))
     
     except Exception as e:
-        raise_error(str(e), is_webui)
+        print(f"Debug: Pipeline error: {str(e)}")
+        raise_error(str(e)), is_webui)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Generate an AI cover song.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    print("Debug: Parsing command-line arguments")
+    parser = argparse.ArgumentParser(description=('Generate an AI cover song.', formatter_class=argparse.ArgumentDefaultsHelpFormatter))
     parser.add_argument('-i', '--song-input', type=str, required=True, help='YouTube URL or path to local mp3/wav file')
-    parser.add_argument('-dir', '--rvc-dirname', type=str, required=True, help='Folder name in rvc_models containing the RVC model')
-    parser.add_argument('-p', '--pitch-change', type=int, required=True, help='Pitch change for AI vocals (octaves, e.g., 1 for male to female)')
+    parser.add_argument('-d', '--rvc-dirname', type=str, required=True, help='Folder name in rvc_models containing the RVC model')
+    parser.add_argument('-p', '--pitch', '--change', type=int, required=True, help='Pitch change for AI vocals (octaves, e.g., 1 for male to female)')
     parser.add_argument('-k', '--keep-files', action='store_true', help='Keep intermediate audio files')
     parser.add_argument('-ir', '--index-rate', type=float, default=0.5, help='Timbre retention (0 to 1)')
-    parser.add_argument('-fr', '--filter-radius', type=int, default=3, help='Median filter radius (0 to 7) for pitch results')
+    parser.add_argument('-fr', '--filter-radius', type=int, default=3, help='Median filter radius (0 to 7)')
     parser.add_argument('-rms', '--rms-mix-rate', type=float, default=0.25, help='Original vs fixed loudness (0 to 1)')
     parser.add_argument('-palgo', '--pitch-detection-algo', type=str, default='rmvpe', choices=['rmvpe', 'mangio-crepe'], help='Pitch detection algorithm')
     parser.add_argument('-hop', '--crepe-hop-length', type=int, default=128, help='Pitch check frequency for mangio-crepe (ms)')
@@ -369,13 +380,27 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    cover_path = song_cover_pipeline(
-        args.song_input, args.rvc_dirname, args.pitch_change, args.keep_files,
-        main_gain=args.main_vol, backup_gain=args.backup_vol, inst_gain=args.inst_vol,
-        index_rate=args.index_rate, filter_radius=args.filter_radius, rms_mix_rate=args.rms_mix_rate,
-        f0_method=args.pitch_detection_algo, crepe_hop_length=args.crepe_hop_length, protect=args.protect,
-        pitch_change_all=args.pitch_change_all, reverb_rm_size=args.reverb_size,
-        reverb_wet=args.reverb_wetness, reverb_dry=args.reverb_dryness, reverb_damping=args.reverb_damping,
+    print(f"Debug: Running pipeline with song_input={args.song_input}, voice_model={args.rvc_dirname}")
+    cover_path = parse_args_cover_pipeline(
+        args.song_input, 
+        args.rvc_dirname, 
+        args.pitch_change, 
+        args.keep_files,
+        main_gain=args.main_vol, 
+        backup_gain=args.backup_vol, 
+        inst_gain=args.inst_vol,
+        index_rate=args.index_rate, 
+        filter_radius=args.filter_radius, 
+        rms_mix_rate=args.rms_mix,
+        f0_method=args.pitch_detection_algo, 
+        crepe_hop_length=args.crepe_hop_length,
+        protect=args.protect,
+        pitch_change_all=args.pitch_change_all,
+        reverb_rm_size=args.reverb_size,
+        reverb_wet=args.reverb_wetness, 
+        reverb_dry=args.reverb_dryness, 
+        reverb_damping=args.reverb_damping,
         output_format=args.output_format
     )
-    print(f"[+] Cover generated at {cover_path}")
+    
+    print(f"[+] Cover generated successfully at {cover_path}")
