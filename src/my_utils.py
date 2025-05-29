@@ -28,15 +28,13 @@ def display_progress(message, percent, is_webui, progress=None):
 def load_mdx():
     MDX_DOWNLOAD_LINK = 'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/'
 
-    if not os.path.exists(mdxnet_models_dir):
-        os.makedirs(mdxnet_models_dir)
     
     mdx_model_names = ['UVR-MDX-NET-Voc_FT.onnx', 'UVR_MDXNET_KARA_2.onnx', 'Reverb_HQ_By_FoxJoy.onnx']
     
     for model in mdx_model_names:
         model_path = os.path.join(mdxnet_models_dir, model)
         if os.path.exists(model_path):
-            print(f'{model} already exists, skipping download.')
+            pass
             continue
             
         print(f'Starting download of {model}...')
