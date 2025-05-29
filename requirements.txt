@@ -21,4 +21,5 @@ numpy==1.23.5
 einops
 local-attention
 tensorboardX
+noisereduce
 matplotlib==3.7.2
