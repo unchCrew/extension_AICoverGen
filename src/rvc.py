@@ -141,7 +141,7 @@ def get_rvc_model(voice_model, is_webui):
 
 def rvc_infer(index_path, index_rate, input_path, output_path, pitch_change, f0_method, cpt, version, net_g, filter_radius, tgt_sr, rms_mix_rate, protect, crepe_hop_length, vc, hubert_model):
     
-    rvc_output = os.path.join(song_dir, 'output_rvc_normal.wav')
+    rvc_output = os.path.join(output_dir, 'output_rvc_normal.wav')
         
     audio = load_audio(input_path, 16000)
     times = [0, 0, 0]
