@@ -12,7 +12,7 @@ sox
 yt_dlp
 pedalboard
 onnxruntime-gpu>=1.17
-torch==2.7.0
+torch==2.0.1
 fairseq @ git+https://github.com/One-sixth/fairseq.git
 ffmpeg-python>=0.2.0
 praat-parselmouth>=0.4.2
