@@ -179,11 +179,11 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
     with gr.Tab("Generate"):
         with gr.Group(elem_classes=["section"]):
             gr.Markdown("### Main Options")
-            with gr.Row(variant="compact"):
+            with gr.Row(variant="compact", equal_height=True):
                 rvc_model = gr.Dropdown(voice_models, label="Voice Models", info="Add models to rvc_models and refresh.")
                 ref_btn = gr.Button("🔄 Refresh Models", variant="primary")
 
-            with gr.Row(variant="compact"):
+            with gr.Row(variant="compact", equal_height=True):
                 with gr.Column(visible=visibility_state) as yt_link_col:
                     song_input = gr.Textbox(label="Song Input", placeholder="YouTube link or local file path")
                     show_file_upload_button = gr.Button("Upload File Instead")
@@ -224,7 +224,7 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
                 reverb_damping = gr.Slider(0, 1, value=0.7, label="Damping")
             output_format = gr.Dropdown(["mp3", "wav"], value="mp3", label="Output Format", info="mp3: smaller, wav: higher quality")
 
-        with gr.Row():
+        with gr.Row(equal_height=True):
             clear_btn = gr.Button("Clear", variant="secondary")
             generate_btn = gr.Button("Generate", variant="primary")
             ai_cover = gr.Audio(label="AI Cover", interactive=False)
