@@ -1,6 +1,7 @@
 from multiprocessing import cpu_count
 from pathlib import Path
-
+from scipy.io import wavfile
+import noisereduce as nr
 import torch
 from fairseq import checkpoint_utils
 from scipy.io import wavfile
@@ -130,8 +131,12 @@ def get_vc(device, is_half, config, model_path):
 
 
 def rvc_infer(index_path, index_rate, input_path, output_path, pitch_change, f0_method, cpt, version, net_g, filter_radius, tgt_sr, rms_mix_rate, protect, crepe_hop_length, vc, hubert_model):
+    rvc_output = "converted_voice.wav"
     audio = load_audio(input_path, 16000)
     times = [0, 0, 0]
     if_f0 = cpt.get('f0', 1)
     audio_opt = vc.pipeline(hubert_model, net_g, 0, audio, input_path, times, pitch_change, f0_method, index_path, index_rate, if_f0, filter_radius, tgt_sr, 0, rms_mix_rate, version, protect, crepe_hop_length)
-    wavfile.write(output_path, tgt_sr, audio_opt)
+    wavfile.write(rvc_output, tgt_sr, audio_opt)
+    rate, data = wavfile.read(rvc_output)
+    reduced_noise = nr.reduce_noise(y=data, sr=rate)
+    wavfile.write(output_path, rate, reduced_noise)
