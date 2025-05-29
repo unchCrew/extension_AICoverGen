@@ -1,12 +1,12 @@
 pip>=23.3; sys_platform == 'darwin'
 wheel; sys_platform == 'darwin'
 PyYAML; sys_platform == 'darwin'
-numpy==1.26.4
+numpy==1.23.5
 requests
 mega.py
 gdown
 wget
-matplotlib==3.7.2
+
 gradio
 librosa==0.9.2
 sox
