@@ -15,6 +15,8 @@ import sox
 import yt_dlp
 from mdx import run_mdx
 from rvc import Config, load_hubert, get_vc, rvc_infer
+from pedalboard.io import AudioFile
+
 import gradio as gr
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
