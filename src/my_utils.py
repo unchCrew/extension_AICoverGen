@@ -16,10 +16,7 @@ def load_hubert_new(config, path=f"{rvc_models_dir}/hubert_base.pt"):
     )
     hubert_model = models[0]
     hubert_model = hubert_model.to(config)
-    if config.is_half:
-        hubert_model = hubert_model.half()
-    else:
-        hubert_model = hubert_model.float()
+    hubert_model = hubert_model.float()
     return hubert_model.eval()
 
 
