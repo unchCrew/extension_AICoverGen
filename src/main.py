@@ -7,16 +7,16 @@ import shlex
 import subprocess
 from contextlib import suppress
 from urllib.parse import urlparse, parse_qs
-from my_utils import raise_exception, display_progress, get_and_load_hubert_new, download_rmvpe, load_mdx, add_audio_effects
+from my_utils import raise_exception, display_progress, load_mdx, add_audio_effects
+from rvc import Config, get_vc, rvc_infer, voice_change
+
 import librosa
 import numpy as np
 import soundfile as sf
 import sox
 import yt_dlp
 from mdx import run_mdx
-from rvc import Config, get_vc, rvc_infer
 from pydub import AudioSegment
-
 import gradio as gr
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -76,29 +76,6 @@ def yt_download(link):
     return download_path
 
 
-def raise_exception(error_msg, is_webui):
-    if is_webui:
-        raise gr.Error(error_msg)
-    else:
-        raise Exception(error_msg)
-
-
-def get_rvc_model(voice_model, is_webui):
-    rvc_model_filename, rvc_index_filename = None, None
-    model_dir = os.path.join(rvc_models_dir, voice_model)
-    for file in os.listdir(model_dir):
-        ext = os.path.splitext(file)[1]
-        if ext == '.pth':
-            rvc_model_filename = file
-        if ext == '.index':
-            rvc_index_filename = file
-
-    if rvc_model_filename is None:
-        error_msg = f'No model file exists in {model_dir}.'
-        raise_exception(error_msg, is_webui)
-
-    return os.path.join(model_dir, rvc_model_filename), os.path.join(model_dir, rvc_index_filename) if rvc_index_filename else ''
-
 
 def get_audio_paths(song_dir):
     orig_song_path = None
@@ -154,12 +131,6 @@ def get_hash(filepath):
     return file_hash.hexdigest()[:11]
 
 
-def display_progress(message, percent, is_webui, progress=None):
-    if is_webui:
-        progress(percent, desc=message)
-    else:
-        print(message)
-
 
 def preprocess_song(song_input, mdx_model_params, song_id, is_webui, input_type, progress=None):
     keep_orig = False
@@ -187,20 +158,6 @@ def preprocess_song(song_input, mdx_model_params, song_id, is_webui, input_type,
     _, main_vocals_dereverb_path = run_mdx(mdx_model_params, song_output_dir, os.path.join(mdxnet_models_dir, 'Reverb_HQ_By_FoxJoy.onnx'), main_vocals_path, invert_suffix='DeReverb', exclude_main=True, denoise=True)
 
     return orig_song_path, vocals_path, instrumentals_path, main_vocals_path, backup_vocals_path, main_vocals_dereverb_path
-
-
-def voice_change(voice_model, vocals_path, output_path, pitch_change, f0_method, index_rate, filter_radius, rms_mix_rate, protect, crepe_hop_length, is_webui):
-    rvc_model_path, rvc_index_path = get_rvc_model(voice_model, is_webui)
-    device = 'cuda:0'
-    download_rmvpe()
-    config = Config(device, True)
-    hubert_model = get_and_load_hubert_new(config=device)
-    cpt, version, net_g, tgt_sr, vc = get_vc(device, config.is_half, config, rvc_model_path)
-
-    # convert main vocals
-    rvc_infer(rvc_index_path, index_rate, vocals_path, output_path, pitch_change, f0_method, cpt, version, net_g, filter_radius, tgt_sr, rms_mix_rate, protect, crepe_hop_length, vc, hubert_model)
-    del hubert_model, cpt
-    gc.collect()
 
 
 
@@ -264,7 +221,7 @@ def song_cover_pipeline(song_input, voice_model, pitch_change, keep_files,
                 orig_song_path, instrumentals_path, main_vocals_dereverb_path, backup_vocals_path = paths
 
         pitch_change = pitch_change * 12 + pitch_change_all
-        ai_vocals_path = os.path.join(song_dir, f'{os.path.splitext(os.path.basename(orig_song_path))[0]}_{voice_model}_p{pitch_change}_i{index_rate}_fr{filter_radius}_rms{rms_mix_rate}_pro{protect}_{f0_method}{"" if f0_method != "mangio-crepe" else f"_{crepe_hop_length}"}.wav')
+        ai_vocals_path = os.path.join(song_dir, f'{os.path.splitext(os.path.basename(orig_song_path))[0]}_{voice_model}_p{pitch_change}.wav')
         ai_cover_path = os.path.join(song_dir, f'{os.path.splitext(os.path.basename(orig_song_path))[0]} ({voice_model} Ver).{output_format}')
 
         if not os.path.exists(ai_vocals_path):
