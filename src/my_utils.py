@@ -11,6 +11,7 @@ from pedalboard.io import AudioFile
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
+output_dir = os.path.join(BASE_DIR, 'song_output')
 
 def raise_exception(error_msg, is_webui):
     if is_webui:
