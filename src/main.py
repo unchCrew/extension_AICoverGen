@@ -195,7 +195,7 @@ def voice_change(voice_model, vocals_path, output_path, pitch_change, f0_method,
     device = 'cuda:0'
     download_rmvpe()
     config = Config(device, True)
-    hubert_model = get_and_load_hubert_new(device)
+    hubert_model = get_and_load_hubert_new(config=device)
     cpt, version, net_g, tgt_sr, vc = get_vc(device, config.is_half, config, rvc_model_path)
 
     # convert main vocals
