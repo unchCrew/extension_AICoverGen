@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -55,11 +56,18 @@ def get_hubert_path() -> Path:
     return HUBERT_PATH
 
 def sanitize_filename(filename: str) -> str:
-    """Sanitize a filename by replacing invalid characters."""
-    invalid_chars = '<>:"/\\|?*'
-    for char in invalid_chars:
-        filename = filename.replace(char, "_")
-    return filename[:200]  # Truncate to avoid filesystem limits
+    """Sanitize a filename by replacing invalid characters and truncating length."""
+    invalid_chars = r'[<>:"/\\|?*]'
+    filename = re.sub(invalid_chars, "_", filename)
+    filename = re.sub(r'[\x00-\x1F\x7F]', "", filename.strip())
+    return filename[:200] or "default_audio"
+
+def validate_youtube_url(url: str) -> bool:
+    """Validate if the URL is a valid YouTube URL."""
+    youtube_regex = (
+        r'^(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/)[\w-]{11}.*$'
+    )
+    return bool(re.match(youtube_regex, url))
 
 def get_youtube_video_id(url: str) -> Optional[str]:
     """Extract video ID from a YouTube URL."""
@@ -76,6 +84,11 @@ def get_youtube_video_id(url: str) -> Optional[str]:
 
 def download_youtube(link: str, is_webui: bool) -> str:
     """Download audio from a YouTube URL."""
+    if not validate_youtube_url(link):
+        error_msg = "Invalid YouTube URL format. Use a valid URL like 'https://www.youtube.com/watch?v=VIDEO_ID' or 'https://youtu.be/VIDEO_ID'."
+        logger.error(error_msg)
+        raise_error(error_msg, is_webui)
+
     class NoCookieYoutubeDL(yt_dlp.YoutubeDL):
         def save_cookies(self):
             logger.debug("Skipping cookie saving")
@@ -102,7 +115,7 @@ def download_youtube(link: str, is_webui: bool) -> str:
         "writeautomaticsub": False,
         "no_cookies": True,
         "cookiesfrombrowser": None,
-        "cookiefile": str(COOKIES_PATH),
+        "cookiefile": str(COOKIES_PATH) if COOKIES_PATH.exists() else None,
         "noplaylist": True,
         "geo_bypass": True,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -111,20 +124,26 @@ def download_youtube(link: str, is_webui: bool) -> str:
     try:
         logger.info(f"Starting download for URL: {link}")
         with NoCookieYoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(link, download=True)
-            output_path = ydl.prepare_filename(info)
-            output_path = output_path.rsplit(".", 1)[0] + ".wav"
-            output_path = sanitize_filename(output_path)
+            info = ydl.extract_info(link, download=False)
+            if not info:
+                raise_error("Failed to extract video info. Ensure the video is publicly accessible.", is_webui)
+            video_id = info.get("id", "unknown")
+            title = info.get("title", "unknown")
+            sanitized_title = sanitize_filename(f"{video_id}_{title}")
+            output_path = str(OUTPUT_DIR / f"{sanitized_title}.wav")
+            ydl_opts["outtmpl"] = str(OUTPUT_DIR / f"{sanitized_title}.%(ext)s")
+            with NoCookieYoutubeDL(ydl_opts) as ydl:
+                ydl.download([link])
             if not Path(output_path).exists():
-                raise ValueError(f"Downloaded file {output_path} does not exist")
+                raise_error(f"Downloaded file {output_path} does not exist. Check if the video is accessible or requires cookies.", is_webui)
             logger.info(f"Download completed: {output_path}")
             return output_path
     except yt_dlp.utils.DownloadError as e:
-        error_msg = f"YouTube download failed: {e}. Ensure the URL is valid and the video is publicly accessible."
+        error_msg = f"YouTube download failed: {str(e)}. Ensure the video is publicly accessible or upload a valid Netscape cookies file to {COOKIES_PATH}."
         logger.error(error_msg)
         raise_error(error_msg, is_webui)
     except Exception as e:
-        error_msg = f"Unexpected error during YouTube download: {e}"
+        error_msg = f"Unexpected error during YouTube download: {str(e)}. Please check the URL and try again."
         logger.error(error_msg)
         raise_error(error_msg, is_webui)
 
