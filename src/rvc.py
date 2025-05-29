@@ -5,6 +5,7 @@ import noisereduce as nr
 import torch
 from fairseq import checkpoint_utils
 from scipy.io import wavfile
+from my_utils import get_and_load_hubert_new, download_rmvpe
 
 from infer_pack.models import (
     SynthesizerTrnMs256NSFsid,
@@ -15,7 +16,9 @@ from infer_pack.models import (
 from my_utils import load_audio
 from vc_infer_pipeline import VC
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
+output_dir = os.path.join(BASE_DIR, 'song_output')
 
 
 class Config:
@@ -82,18 +85,6 @@ class Config:
         return x_pad, x_query, x_center, x_max
 
 
-def load_hubert(device, is_half, model_path):
-    models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([model_path], suffix='', )
-    hubert = models[0]
-    hubert = hubert.to(device)
-
-    if is_half:
-        hubert = hubert.half()
-    else:
-        hubert = hubert.float()
-
-    hubert.eval()
-    return hubert
 
 
 def get_vc(device, is_half, config, model_path):
@@ -130,13 +121,48 @@ def get_vc(device, is_half, config, model_path):
     return cpt, version, net_g, tgt_sr, vc
 
 
+def get_rvc_model(voice_model, is_webui):
+    rvc_model_filename, rvc_index_filename = None, None
+    model_dir = os.path.join(rvc_models_dir, voice_model)
+    for file in os.listdir(model_dir):
+        ext = os.path.splitext(file)[1]
+        if ext == '.pth':
+            rvc_model_filename = file
+        if ext == '.index':
+            rvc_index_filename = file
+
+    if rvc_model_filename is None:
+        error_msg = f'No model file exists in {model_dir}.'
+        raise_exception(error_msg, is_webui)
+
+    return os.path.join(model_dir, rvc_model_filename), os.path.join(model_dir, rvc_index_filename) if rvc_index_filename else ''
+
+
+
 def rvc_infer(index_path, index_rate, input_path, output_path, pitch_change, f0_method, cpt, version, net_g, filter_radius, tgt_sr, rms_mix_rate, protect, crepe_hop_length, vc, hubert_model):
-    rvc_output = "converted_voice.wav"
+    
+    rvc_output = os.path.join(song_dir, 'output_rvc_normal.wav')
+        
     audio = load_audio(input_path, 16000)
     times = [0, 0, 0]
     if_f0 = cpt.get('f0', 1)
     audio_opt = vc.pipeline(hubert_model, net_g, 0, audio, input_path, times, pitch_change, f0_method, index_path, index_rate, if_f0, filter_radius, tgt_sr, 0, rms_mix_rate, version, protect, crepe_hop_length)
     wavfile.write(rvc_output, tgt_sr, audio_opt)
+    
     rate, data = wavfile.read(rvc_output)
     reduced_noise = nr.reduce_noise(y=data, sr=rate)
     wavfile.write(output_path, rate, reduced_noise)
+
+
+def voice_change(voice_model, vocals_path, output_path, pitch_change, f0_method, index_rate, filter_radius, rms_mix_rate, protect, crepe_hop_length, is_webui):
+    rvc_model_path, rvc_index_path = get_rvc_model(voice_model, is_webui)
+    device = 'cuda:0'
+    download_rmvpe()
+    config = Config(device, True)
+    hubert_model = get_and_load_hubert_new(config=device)
+    cpt, version, net_g, tgt_sr, vc = get_vc(device, config.is_half, config, rvc_model_path)
+
+    # convert main vocals
+    rvc_infer(rvc_index_path, index_rate, vocals_path, output_path, pitch_change, f0_method, cpt, version, net_g, filter_radius, tgt_sr, rms_mix_rate, protect, crepe_hop_length, vc, hubert_model)
+    del hubert_model, cpt
+    gc.collect()
