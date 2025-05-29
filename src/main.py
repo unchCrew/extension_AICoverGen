@@ -22,9 +22,6 @@ from pydub import AudioSegment
 from http.cookiejar import MozillaCookieJar
 from io import StringIO
 
-from mdx import run_mdx
-from rvc import Config, load_hubert, get_vc, rvc_infer
-
 # Constants
 BASE_DIR = Path(__file__).resolve().parent.parent
 MDX_MODELS_DIR = BASE_DIR / 'mdxnet_models'
@@ -68,9 +65,47 @@ def get_cookies_path() -> Optional[Path]:
             COOKIES_PATH = None
     return COOKIES_PATH
 
-def download_youtube(link: str, is_webui: bool) -> str:
+def get_youtube_video_id(url: str) -> Optional[str]:
+    """Extract video ID from various YouTube URL formats."""
+    try:
+        parsed_url = urlparse(url)
+        hostname = parsed_url.hostname.lower() if parsed_url.hostname else ''
+        
+        # Handle standard YouTube URLs (e.g., https://www.youtube.com/watch?v=VIDEO_ID)
+        if hostname in ('www.youtube.com', 'youtube.com'):
+            if parsed_url.path == '/watch':
+                query_params = parse_qs(parsed_url.query)
+                if 'v' in query_params:
+                    return query_params['v'][0]
+            # Handle embed URLs (e.g., https://www.youtube.com/embed/VIDEO_ID)
+            elif parsed_url.path.startswith('/embed/'):
+                return parsed_url.path.split('/embed/')[1].split('/')[0]
+            # Handle playlist URLs (extract first video ID)
+            elif parsed_url.path.startswith('/playlist') or 'list' in parse_qs(parsed_url.query):
+                with yt_dlp.YoutubeDL({'quiet': True, 'extract_flat': True}) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    if info.get('entries') and len(info['entries']) > 0:
+                        return info['entries'][0].get('id')
+        
+        # Handle shortened youtu.be URLs (e.g., https://youtu.be/VIDEO_ID)
+        elif hostname == 'youtu.be':
+            return parsed_url.path.lstrip('/')
+        
+        print(f"Debug: Invalid or unsupported YouTube URL: {url}")
+        return None
+    except Exception as e:
+        print(f"Debug: Error parsing YouTube URL {url}: {str(e)}")
+        return None
+
+def download_youtube(link: str, is_webui: bool, progress: Optional[gr.Progress] = None) -> str:
+    """Download audio from a YouTube URL with robust handling of various formats."""
     cookies_path = get_cookies_path()
     print(f"Debug: Cookies path is {cookies_path}")
+
+    # Validate YouTube URL
+    video_id = get_youtube_video_id(link)
+    if not video_id:
+        raise_error("Invalid YouTube URL. Please provide a valid YouTube video URL (e.g., https://www.youtube.com/watch?v=VIDEO_ID or https://youtu.be/VIDEO_ID).", is_webui)
 
     # Custom YoutubeDL class to disable cookie saving
     class NoCookieYoutubeDL(yt_dlp.YoutubeDL):
@@ -85,32 +120,59 @@ def download_youtube(link: str, is_webui: bool) -> str:
             else:
                 super()._load_cookies(*args, **kwargs)
 
+    # yt-dlp options with enhanced format selection and progress hooks
     ydl_opts = {
-        'format': 'bestaudio',
-        'outtmpl': str(OUTPUT_DIR / '%(id)s_%(title)s.%(ext)s'),  # Unique filename
+        'format': 'bestaudio[ext=mp3]/bestaudio[ext=m4a]/bestaudio/best',  # Prioritize mp3, then m4a, then any audio
+        'outtmpl': str(OUTPUT_DIR / f'{video_id}_%(title)s.%(ext)s'),  # Unique filename with video ID
+        'quiet': False,
         'no_warnings': True,
-        'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',  # Try mp3 first
+            'preferredquality': '192',  # Target quality
+        }],
         'writesubtitles': False,
         'writeautomaticsub': False,
-        'no_cookies': True,  # Disable all cookie handling
+        'no_cookies': True,  # Disable all cookie handling by default
         'cookiesfrombrowser': None,  # No browser cookies
         'cookiefile': str(cookies_path) if cookies_path else None,  # Only if valid
+        'progress_hooks': [lambda d: show_progress(
+            f"Downloading YouTube audio ({d.get('status', 'unknown')})...",
+            min(d.get('_percent_str', '0%').strip('%'), 0.1) if d.get('status') == 'downloading' else 0.05,
+            is_webui,
+            progress
+        )],
+        'noplaylist': True,  # Only download single video, not playlist
+        'retries': 3,  # Retry on failure
+        'fragment_retries': 3,
+        'ignoreerrors': False,
     }
     
     try:
         print(f"Debug: Creating output directory {OUTPUT_DIR}")
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        print(f"Debug: Starting download for URL {link}")
+        print(f"Debug: Starting download for URL {link} (Video ID: {video_id})")
         with NoCookieYoutubeDL(ydl_opts) as ydl:
             result = ydl.extract_info(link, download=True)
             output_path = ydl.prepare_filename(result)
+            # Handle cases where the extension might differ (e.g., m4a instead of mp3)
+            possible_extensions = ['.mp3', '.m4a', '.wav']
+            for ext in possible_extensions:
+                test_path = Path(output_path).with_suffix(ext)
+                if test_path.exists():
+                    output_path = str(test_path)
+                    break
             print(f"Debug: Download completed, output path is {output_path}")
             if not Path(output_path).exists():
                 raise_error(f"Failed to download audio: {output_path} does not exist.", is_webui)
             return output_path
+    except yt_dlp.utils.DownloadError as e:
+        error_msg = f"YouTube download failed: {str(e)}. Possible reasons: video is private, region-locked, age-restricted, or unavailable. Ensure the URL is valid and publicly accessible. For restricted videos, upload a valid Netscape cookies file to /content/HRVC/cookies.txt and set COOKIES_PATH in main.py."
+        print(f"Debug: Download error: {error_msg}")
+        raise_error(error_msg, is_webui)
     except Exception as e:
-        error_msg = f"YouTube download failed: {str(e)}. Ensure the URL is a valid YouTube link (e.g., https://www.youtube.com/watch?v=VIDEO_ID) and the video is publicly accessible. For restricted videos, upload a valid Netscape cookies file to /content/HRVC/cookies.txt and set COOKIES_PATH in main.py."
-        print(f"Debug: Error occurred: {error_msg}")
+        error_msg = f"YouTube download failed: {str(e)}. Please check the URL and try again."
+        print(f"Debug: General error: {error_msg}")
         raise_error(error_msg, is_webui)
 
 def raise_error(message: str, is_webui: bool) -> None:
@@ -118,8 +180,6 @@ def raise_error(message: str, is_webui: bool) -> None:
         raise gr.Error(message)
     else:
         raise ValueError(message)
-
-# ... (rest of the file remains unchanged)
 
 def get_rvc_model(voice_model: str, is_webui: bool) -> Tuple[str, str]:
     model_dir = RVC_MODELS_DIR / voice_model
@@ -193,7 +253,7 @@ def preprocess_song(song_input: str, mdx_model_params: dict, song_id: str, is_we
     song_dir.mkdir(parents=True, exist_ok=True)
     
     show_progress('Preparing audio input...', 0, is_webui, progress)
-    orig_song_path = download_youtube(song_input.split('&')[0], is_webui) if input_type == 'yt' else song_input
+    orig_song_path = download_youtube(song_input.split('&')[0], is_webui, progress) if input_type == 'yt' else song_input
     if not Path(orig_song_path).exists():
         raise_error(f"Audio file {orig_song_path} not found after download.", is_webui)
     orig_song_path = to_stereo(orig_song_path)
