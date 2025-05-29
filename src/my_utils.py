@@ -2,10 +2,39 @@ import ffmpeg
 import numpy as np
 from huggingface_hub import hf_hub_download
 import os
+import requests
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
+mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
 
+
+
+def load_mdx():
+    MDX_DOWNLOAD_LINK = 'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/'
+
+    if not os.path.exists(mdxnet_models_dir):
+        os.makedirs(mdxnet_models_dir)
+    
+    mdx_model_names = ['UVR-MDX-NET-Voc_FT.onnx', 'UVR_MDXNET_KARA_2.onnx', 'Reverb_HQ_By_FoxJoy.onnx']
+    
+    for model in mdx_model_names:
+        model_path = os.path.join(mdxnet_models_dir, model)
+        if os.path.exists(model_path):
+            print(f'{model} already exists, skipping download.')
+            continue
+            
+        print(f'Starting download of {model}...')
+        try:
+            with requests.get(f'{MDX_DOWNLOAD_LINK}{model}', stream=True) as r:
+                r.raise_for_status()
+                with open(model_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            print(f'Successfully downloaded {model}')
+        except requests.RequestException as e:
+            print(f'Failed to download {model}: {e}')
+    
+    print('Model downloading process completed!')
 
 def load_hubert_new(config, path=f"{rvc_models_dir}/hubert_base.pt"):
     from fairseq import checkpoint_utils
