@@ -19,6 +19,7 @@ from mdx import run_mdx
 from pydub import AudioSegment
 import gradio as gr
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
