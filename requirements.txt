@@ -9,8 +9,6 @@ yt_dlp
 pedalboard
 onnxruntime-gpu>=1.17
 torch<2.6
-torchaudio<2.6
-torchvision<0.21
 fairseq==0.12.2
 ffmpeg-python>=0.2.0
 praat-parselmouth>=0.4.2
