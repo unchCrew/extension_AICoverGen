@@ -3,7 +3,7 @@ from pathlib import Path
 from scipy.io import wavfile
 import torch
 from noisereduce.torchgate import TorchGate as TG
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 from fairseq import checkpoint_utils
 from scipy.io import wavfile
