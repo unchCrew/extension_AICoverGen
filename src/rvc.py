@@ -16,7 +16,7 @@ from infer_pack.models import (
 )
 from my_utils import load_audio
 from vc_infer_pipeline import VC
-import os
+import os, gc, re
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
