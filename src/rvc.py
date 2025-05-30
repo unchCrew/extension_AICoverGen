@@ -4,8 +4,7 @@ from scipy.io import wavfile
 import torch
 from noisereduce.torchgate import TorchGate as TG
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-from fairseq import checkpoint_utils
+import noisereduce as nr
 from scipy.io import wavfile
 from my_utils import get_and_load_hubert_new, download_rmvpe
 
