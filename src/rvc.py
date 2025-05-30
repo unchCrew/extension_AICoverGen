@@ -1,8 +1,10 @@
 from multiprocessing import cpu_count
 from pathlib import Path
 from scipy.io import wavfile
-import noisereduce as nr
 import torch
+from noisereduce.torchgate import TorchGate as TG
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
 from fairseq import checkpoint_utils
 from scipy.io import wavfile
 from my_utils import get_and_load_hubert_new, download_rmvpe
@@ -16,6 +18,7 @@ from infer_pack.models import (
 from my_utils import load_audio
 from vc_infer_pipeline import VC
 import os
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
 output_dir = os.path.join(BASE_DIR, 'song_output')
@@ -151,14 +154,14 @@ def rvc_infer(index_path, index_rate, input_path, output_path, pitch_change, f0_
     
     rate, data = wavfile.read(rvc_output)
     reduced_noise = nr.reduce_noise(
-        y=rate, sr=data, prop_decrease=reduction_strength,
+        y=data, sr=rate, prop_decrease=reduction_strength,
     )
     wavfile.write(output_path, rate, reduced_noise)
 
 
 def voice_change(voice_model, vocals_path, output_path, pitch_change, f0_method, index_rate, filter_radius, rms_mix_rate, protect, crepe_hop_length, is_webui):
     rvc_model_path, rvc_index_path = get_rvc_model(voice_model, is_webui)
-    device = 'cuda:0'
+    
     download_rmvpe()
     config = Config(device, True)
     hubert_model = get_and_load_hubert_new(config=device)
