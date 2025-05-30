@@ -224,8 +224,8 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
                 reverb_damping = gr.Slider(0, 1, value=0.7, label="Damping")
             output_format = gr.Dropdown(["mp3", "wav"], value="mp3", label="Output Format", info="mp3: smaller, wav: higher quality")
 
-        with gr.Row(equal_height=True):
-            clear_btn = gr.Button("Clear", variant="secondary")
+        clear_btn = gr.Button("Clear", variant="secondary")
+        with gr.Row(equal_height=True):    
             generate_btn = gr.Button("Generate", variant="primary")
             ai_cover = gr.Audio(label="AI Cover", interactive=False)
 
@@ -257,8 +257,8 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> N
                 model_zip_link = gr.Textbox(label="Model URL", placeholder="HuggingFace/Pixeldrain zip link")
                 model_name = gr.Textbox(label="Model Name", placeholder="Unique model name")
                 download_btn = gr.Button("🌐 Download", variant="primary")
-                dl_output_message = gr.Markdown()
-                download_btn.click(download_online_model, inputs=[model_zip_link, model_name], outputs=[rvc_model, dl_output_message])
+                dl_output_message = gr.Textbox()
+                download_btn.click(download_online_model, inputs=[model_zip_link, model_name], outputs=dl_output_message)
                 gr.Examples(
                     examples=[
                         ["https://huggingface.co/phant0m4r/LiSA/resolve/main/LiSA.zip", "Lisa"],
@@ -273,7 +273,7 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> N
                 pub_zip_link = gr.Textbox(label="Model URL")
                 pub_model_name = gr.Textbox(label="Model Name")
                 download_pub_btn = gr.Button("🌐 Download", variant="primary")
-                pub_dl_output_message = gr.Markdown()
+                pub_dl_output_message = gr.Textbox()
                 filter_tags = gr.CheckboxGroup(label="Filter by Tags")
                 search_query = gr.Textbox(label="Search Models")
                 load_public_models_button = gr.Button("Load Public Models", variant="primary")
@@ -291,7 +291,7 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> N
                 )
                 search_query.input(filter_models, inputs=[filter_tags, search_query], outputs=public_models_table)
                 filter_tags.input(filter_models, inputs=[filter_tags, search_query], outputs=public_models_table)
-                download_pub_btn.click(download_online_model, inputs=[pub_zip_link, pub_model_name], outputs=[rvc_model, pub_dl_output_message])
+                download_pub_btn.click(download_online_model, inputs=[pub_zip_link, pub_model_name], outputs=(pub_dl_output_message)
 
 def create_upload_model_tab() -> None:
     """Create the Upload Model tab for the Gradio UI."""
@@ -315,7 +315,7 @@ if __name__ == "__main__":
     public_models = load_public_models_data()
 
     with gr.Blocks(theme="Thatguy099/Sonix", title="AICoverGen WebUI") as app:
-        gr.Markdown("# AICoverGen WebUI", elem_classes=["header"])
+        gr.Label("# AICoverGen WebUI")
         visibility_state = gr.State(value=True)
         rvc_model, ai_cover = create_generate_tab(voice_models, visibility_state)
         create_download_model_tab(voice_models, public_models)
