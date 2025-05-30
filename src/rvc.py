@@ -7,7 +7,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 import noisereduce as nr
 from scipy.io import wavfile
 from my_utils import get_and_load_hubert_new, download_rmvpe
-
+from my_utils import raise_exception, display_progress
 from infer_pack.models import (
     SynthesizerTrnMs256NSFsid,
     SynthesizerTrnMs256NSFsid_nono,
