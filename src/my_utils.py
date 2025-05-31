@@ -7,7 +7,6 @@ import requests
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
 from pedalboard.io import AudioFile
 
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
 rvc_models_dir = os.path.join(BASE_DIR, 'rvc_models')
@@ -27,9 +26,7 @@ def display_progress(message, percent, is_webui, progress=None):
 
 
 def load_mdx():
-    MDX_DOWNLOAD_LINK = 'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/'
-
-    
+    MDX_DOWNLOAD_LINK = 'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/'    
     mdx_model_names = ['UVR-MDX-NET-Voc_FT.onnx', 'UVR_MDXNET_KARA_2.onnx', 'Reverb_HQ_By_FoxJoy.onnx']
     
     for model in mdx_model_names:
@@ -125,3 +122,38 @@ def add_audio_effects(audio_path, reverb_rm_size, reverb_wet, reverb_dry, reverb
                 o.write(effected)
 
     return output_path
+
+
+def convert_to_stereo(audio_path):
+    wave, sr = librosa.load(audio_path, mono=False, sr=44100)
+
+    # check if mono
+    if type(wave[0]) != np.ndarray:
+        stereo_path = f'{os.path.splitext(audio_path)[0]}_stereo.wav'
+        command = shlex.split(f'ffmpeg -y -loglevel error -i "{audio_path}" -ac 2 -f wav "{stereo_path}"')
+        subprocess.run(command)
+        return stereo_path
+    else:
+        return audio_path
+
+
+def pitch_shift(audio_path, pitch_change):
+    output_path = f'{os.path.splitext(audio_path)[0]}_p{pitch_change}.wav'
+    if not os.path.exists(output_path):
+        y, sr = sf.read(audio_path)
+        tfm = sox.Transformer()
+        tfm.pitch(pitch_change)
+        y_shifted = tfm.build_array(input_array=y, sample_rate_in=sr)
+        sf.write(output_path, y_shifted, sr)
+
+    return output_path
+
+
+def get_hash(filepath):
+    with open(filepath, 'rb') as f:
+        file_hash = hashlib.blake2b()
+        while chunk := f.read(8192):
+            file_hash.update(chunk)
+
+    return file_hash.hexdigest()[:11]
+
