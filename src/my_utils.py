@@ -1,4 +1,6 @@
 import ffmpeg
+import sox
+import librosa
 import numpy as np
 from huggingface_hub import hf_hub_download
 import os, gc, re
@@ -6,6 +8,8 @@ import gradio as gr
 import requests
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
 from pedalboard.io import AudioFile
+from pydub import AudioSegment
+import numpy as np
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
@@ -130,8 +134,9 @@ def convert_to_stereo(audio_path):
     # check if mono
     if type(wave[0]) != np.ndarray:
         stereo_path = f'{os.path.splitext(audio_path)[0]}_stereo.wav'
-        command = shlex.split(f'ffmpeg -y -loglevel error -i "{audio_path}" -ac 2 -f wav "{stereo_path}"')
-        subprocess.run(command)
+        command = f'ffmpeg -y -loglevel error -i "{audio_path}" -ac 2 -f wav "{stereo_path}"'
+        
+        os.system(command)
         return stereo_path
     else:
         return audio_path
@@ -156,4 +161,11 @@ def get_hash(filepath):
             file_hash.update(chunk)
 
     return file_hash.hexdigest()[:11]
+
+def combine_audio(audio_paths, output_path, main_gain, backup_gain, inst_gain, output_format):
+    main_vocal_audio = AudioSegment.from_wav(audio_paths[0]) - 4 + main_gain
+    backup_vocal_audio = AudioSegment.from_wav(audio_paths[1]) - 6 + backup_gain
+    instrumental_audio = AudioSegment.from_wav(audio_paths[2]) - 7 + inst_gain
+    main_vocal_audio.overlay(backup_vocal_audio).overlay(instrumental_audio).export(output_path, format=output_format)
+
 
