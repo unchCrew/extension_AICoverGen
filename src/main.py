@@ -3,23 +3,18 @@ import gc
 import hashlib
 import json
 import os
-import shlex
-import subprocess
 from contextlib import suppress
 from urllib.parse import urlparse, parse_qs
-from my_utils import raise_exception, display_progress, load_mdx, add_audio_effects
-from rvc import Config, get_vc, rvc_infer, voice_change
-
-import librosa
-import numpy as np
 import soundfile as sf
-import sox
 import yt_dlp
 from mdx import run_mdx
-from pydub import AudioSegment
-import gradio as gr
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import gradio as gr
+from my_utils import raise_exception, display_progress
+from my_utils import load_mdx, add_audio_effects, combine_audio
+from my_utils import pitch_shift, convert_to_stereo get_hash
+from rvc import Config, get_vc, rvc_infer, voice_change
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 mdxnet_models_dir = os.path.join(BASE_DIR, 'mdxnet_models')
@@ -98,39 +93,6 @@ def get_audio_paths(song_dir):
     return orig_song_path, instrumentals_path, main_vocals_dereverb_path, backup_vocals_path
 
 
-def convert_to_stereo(audio_path):
-    wave, sr = librosa.load(audio_path, mono=False, sr=44100)
-
-    # check if mono
-    if type(wave[0]) != np.ndarray:
-        stereo_path = f'{os.path.splitext(audio_path)[0]}_stereo.wav'
-        command = shlex.split(f'ffmpeg -y -loglevel error -i "{audio_path}" -ac 2 -f wav "{stereo_path}"')
-        subprocess.run(command)
-        return stereo_path
-    else:
-        return audio_path
-
-
-def pitch_shift(audio_path, pitch_change):
-    output_path = f'{os.path.splitext(audio_path)[0]}_p{pitch_change}.wav'
-    if not os.path.exists(output_path):
-        y, sr = sf.read(audio_path)
-        tfm = sox.Transformer()
-        tfm.pitch(pitch_change)
-        y_shifted = tfm.build_array(input_array=y, sample_rate_in=sr)
-        sf.write(output_path, y_shifted, sr)
-
-    return output_path
-
-
-def get_hash(filepath):
-    with open(filepath, 'rb') as f:
-        file_hash = hashlib.blake2b()
-        while chunk := f.read(8192):
-            file_hash.update(chunk)
-
-    return file_hash.hexdigest()[:11]
-
 
 
 def preprocess_song(song_input, mdx_model_params, song_id, is_webui, input_type, progress=None):
@@ -160,15 +122,6 @@ def preprocess_song(song_input, mdx_model_params, song_id, is_webui, input_type,
 
     return orig_song_path, vocals_path, instrumentals_path, main_vocals_path, backup_vocals_path, main_vocals_dereverb_path
 
-
-
-
-
-def combine_audio(audio_paths, output_path, main_gain, backup_gain, inst_gain, output_format):
-    main_vocal_audio = AudioSegment.from_wav(audio_paths[0]) - 4 + main_gain
-    backup_vocal_audio = AudioSegment.from_wav(audio_paths[1]) - 6 + backup_gain
-    instrumental_audio = AudioSegment.from_wav(audio_paths[2]) - 7 + inst_gain
-    main_vocal_audio.overlay(backup_vocal_audio).overlay(instrumental_audio).export(output_path, format=output_format)
 
 
 def song_cover_pipeline(song_input, voice_model, pitch_change, keep_files,
