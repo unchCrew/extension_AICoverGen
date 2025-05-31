@@ -336,16 +336,17 @@ class VC(object):
             f0 = self.get_f0_crepe_computation(
                 x, f0_min, f0_max, p_len, crepe_hop_length, "tiny"
             )
+        # Uncomment the following block to enable pyin as a standalone f0_method
+        elif f0_method == "pyin":
+            f0 = self.get_f0_pyin_computation(x, f0_min, f0_max, p_len)
         elif f0_method == "rmvpe":
             if not hasattr(self, "model_rmvpe"):
-                from src.rmvpe import RMVPE
+                from rmvpe import RMVPE
                 self.model_rmvpe = RMVPE(
                     os.path.join(BASE_DIR, 'rvc_models', 'rmvpe.pt'), is_half=self.is_half, device=self.device
                 )
             f0 = self.model_rmvpe.infer_from_audio(x, thred=0.03)
-        # Uncomment the following block to enable pyin as a standalone f0_method
-         elif f0_method == "pyin":
-             f0 = self.get_f0_pyin_computation(x, f0_min, f0_max, p_len)
+
         elif "hybrid" in f0_method:
             input_audio_path2wav[input_audio_path] = x.astype(np.double)
             f0 = self.get_f0_hybrid_computation(
