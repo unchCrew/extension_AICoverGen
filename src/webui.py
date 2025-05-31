@@ -5,16 +5,15 @@ import urllib.request
 import zipfile
 from argparse import ArgumentParser
 from typing import List, Tuple, Optional, Dict
-from pathlib import Path
 import gradio as gr
 from main import song_cover_pipeline
 
 # Configuration constants
-BASE_DIR = Path(__file__).resolve().parent.parent
-MDXNET_MODELS_DIR = BASE_DIR / "mdxnet_models"
-RVC_MODELS_DIR = BASE_DIR / "rvc_models"
-OUTPUT_DIR = BASE_DIR / "song_output"
-PUBLIC_MODELS_FILE = RVC_MODELS_DIR / "public_models.json"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MDXNET_MODELS_DIR = os.path.join(BASE_DIR, "mdxnet_models")
+RVC_MODELS_DIR = os.path.join(BASE_DIR, "rvc_models")
+OUTPUT_DIR = os.path.join(BASE_DIR, "song_output")
+PUBLIC_MODELS_FILE = os.path.join(RVC_MODELS_DIR, "public_models.json")
 EXCLUDED_MODELS = {"hubert_base.pt", "MODELS.txt", "public_models.json", "rmvpe.pt"}
 DEFAULT_MODEL_SETTINGS = {
     "pitch": 0,
@@ -35,7 +34,7 @@ DEFAULT_MODEL_SETTINGS = {
     "output_format": "mp3",
 }
 
-def get_current_models(models_dir: Path) -> List[str]:
+def get_current_models(models_dir: str) -> List[str]:
     """Retrieve list of available models, excluding specified files."""
     try:
         return [item for item in os.listdir(models_dir) if item not in EXCLUDED_MODELS]
@@ -52,20 +51,20 @@ def load_public_models_data() -> dict:
     except json.JSONDecodeError:
         raise gr.Error("Invalid public models JSON format.")
 
-def extract_zip(extraction_folder: Path, zip_path: Path, progress: gr.Progress = gr.Progress()) -> Tuple[Optional[Path], Optional[Path]]:
+def extract_zip(extraction_folder: str, zip_path: str, progress: gr.Progress = gr.Progress()) -> Tuple[Optional[str], Optional[str]]:
     """Extract zip file and find model and index files."""
-    extraction_folder.mkdir(parents=True, exist_ok=True)
+    os.makedirs(extraction_folder, exist_ok=True)
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(extraction_folder)
-    zip_path.unlink()
+    os.remove(zip_path)
 
     index_filepath, model_filepath = None, None
     for root, _, files in os.walk(extraction_folder):
         for name in files:
-            file_path = Path(root) / name
-            if name.endswith(".index") and file_path.stat().st_size > 1024 * 100:
+            file_path = os.path.join(root, name)
+            if name.endswith(".index") and os.path.getsize(file_path) > 1024 * 100:
                 index_filepath = file_path
-            if name.endswith(".pth") and file_path.stat().st_size > 1024 * 1024 * 40:
+            if name.endswith(".pth") and os.path.getsize(file_path) > 1024 * 1024 * 40:
                 model_filepath = file_path
 
     if not model_filepath:
@@ -73,14 +72,15 @@ def extract_zip(extraction_folder: Path, zip_path: Path, progress: gr.Progress =
 
     # Move files to extraction folder root
     if model_filepath:
-        model_filepath.rename(extraction_folder / model_filepath.name)
+        shutil.move(model_filepath, os.path.join(extraction_folder, os.path.basename(model_filepath)))
     if index_filepath:
-        index_filepath.rename(extraction_folder / index_filepath.name)
+        shutil.move(index_filepath, os.path.join(extraction_folder, os.path.basename(index_filepath)))
 
     # Clean up subdirectories
-    for item in extraction_folder.iterdir():
-        if item.is_dir():
-            shutil.rmtree(item)
+    for item in os.listdir(extraction_folder):
+        item_path = os.path.join(extraction_folder, item)
+        if os.path.isdir(item_path):
+            shutil.rmtree(item_path)
 
     return model_filepath, index_filepath
 
@@ -89,13 +89,13 @@ def download_online_model(url: str, dir_name: str, progress: gr.Progress = gr.Pr
     if not url or not dir_name:
         raise gr.Error("URL and model name are required.")
     
-    extraction_folder = RVC_MODELS_DIR / dir_name
-    if extraction_folder.exists():
+    extraction_folder = os.path.join(RVC_MODELS_DIR, dir_name)
+    if os.path.exists(extraction_folder):
         raise gr.Error(f"Voice model directory {dir_name} already exists!")
 
     try:
         zip_name = url.split("/")[-1]
-        zip_path = Path(zip_name)
+        zip_path = zip_name
         if "pixeldrain.com" in url:
             url = f"https://pixeldrain.com/api/file/{zip_name}"
 
@@ -113,13 +113,13 @@ def upload_local_model(zip_path: str, dir_name: str, progress: gr.Progress = gr.
     if not zip_path or not dir_name:
         raise gr.Error("Zip file and model name are required.")
 
-    extraction_folder = RVC_MODELS_DIR / dir_name
-    if extraction_folder.exists():
+    extraction_folder = os.path.join(RVC_MODELS_DIR, dir_name)
+    if os.path.exists(extraction_folder):
         raise gr.Error(f"Voice model directory {dir_name} already exists!")
 
     try:
         progress(0.5, desc="Extracting zip...")
-        extract_zip(extraction_folder, Path(zip_path))
+        extract_zip(extraction_folder, zip_path)
         gr.Info(f"Model {dir_name} successfully uploaded!")
         return gr.Dropdown(choices=get_current_models(RVC_MODELS_DIR))
     except Exception as e:
