@@ -12,7 +12,7 @@ from mdx import run_mdx
 import gradio as gr
 from my_utils import raise_exception, display_progress
 from my_utils import load_mdx, add_audio_effects, combine_audio
-from my_utils import pitch_shift, convert_to_stereo get_hash
+from my_utils import pitch_shift, convert_to_stereo, get_hash
 from rvc import Config, get_vc, rvc_infer, voice_change
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
