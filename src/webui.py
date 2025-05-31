@@ -6,10 +6,11 @@ import zipfile
 from argparse import ArgumentParser
 from typing import List, Tuple, Optional, Dict
 import gradio as gr
-from main import song_cover_pipeline
+from src.main import song_cover_pipeline
 
-# Configuration constants
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.getcwd()
+sys.path.append(now_dir)
+
 MDXNET_MODELS_DIR = os.path.join(BASE_DIR, "mdxnet_models")
 RVC_MODELS_DIR = os.path.join(BASE_DIR, "rvc_models")
 OUTPUT_DIR = os.path.join(BASE_DIR, "song_output")
