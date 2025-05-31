@@ -6,7 +6,7 @@ from noisereduce.torchgate import TorchGate as TG
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 import noisereduce as nr
 from scipy.io import wavfile
-from my_utils import get_and_load_hubert_new, download_rmvpe
+from my_utils import get_and_load_hubert_new
 from my_utils import raise_exception, display_progress
 from infer_pack.models import (
     SynthesizerTrnMs256NSFsid,
@@ -163,9 +163,7 @@ def rvc_infer(index_path, index_rate, input_path, output_path, pitch_change, f0_
 
 
 def voice_change(voice_model, vocals_path, output_path, pitch_change, f0_method, index_rate, filter_radius, rms_mix_rate, protect, crepe_hop_length, is_webui):
-    rvc_model_path, rvc_index_path = get_rvc_model(voice_model, is_webui)
-    
-    download_rmvpe()
+    rvc_model_path, rvc_index_path = get_rvc_model(voice_model, is_webui)    
     config = Config(device, True)
     hubert_model = get_and_load_hubert_new(config=device)
     cpt, version, net_g, tgt_sr, vc = get_vc(device, config.is_half, config, rvc_model_path)
