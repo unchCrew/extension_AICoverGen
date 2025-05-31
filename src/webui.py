@@ -292,7 +292,7 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> N
                 )
                 search_query.input(filter_models, inputs=[filter_tags, search_query], outputs=public_models_table)
                 filter_tags.input(filter_models, inputs=[filter_tags, search_query], outputs=public_models_table)
-                download_pub_btn.click(download_online_model, inputs=[pub_zip_link, pub_model_name], outputs=(pub_dl_output_message)
+                download_pub_btn.click(download_online_model, inputs=[pub_zip_link, pub_model_name], outputs=pub_dl_output_message)
 
 def create_upload_model_tab() -> None:
     """Create the Upload Model tab for the Gradio UI."""
