@@ -38,14 +38,14 @@ def load_mdx():
             pass
             continue
             
-        print(f'Starting download of {model}...')
+        
         try:
             with requests.get(f'{MDX_DOWNLOAD_LINK}{model}', stream=True) as r:
                 r.raise_for_status()
                 with open(model_path, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=8192):
                         f.write(chunk)
-            print(f'Successfully downloaded {model}')
+            
         except requests.RequestException as e:
             print(f'Failed to download {model}: {e}')
     
