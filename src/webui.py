@@ -106,7 +106,8 @@ def download_online_model(url: str, dir_name: str, progress: gr.Progress = gr.Pr
         progress(0.5, desc="Extracting zip...")
         extract_zip(extraction_folder, zip_path)
         gr.Info(f"Model {dir_name} successfully downloaded!")
-        return gr.Dropdown(choices=get_current_models(RVC_MODELS_DIR))
+        return f"Model {dir_name} successfully downloaded!"
+        
     except Exception as e:
         raise gr.Error(f"Download failed: {str(e)}")
 
@@ -207,7 +208,7 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
                 filter_radius = gr.Slider(0, 7, value=3, step=1, label="Filter Radius", info="Reduces breathiness if >=3")
                 rms_mix_rate = gr.Slider(0, 1, value=0.25, label="RMS Mix Rate", info="Original (0) vs. fixed loudness (1)")
                 protect = gr.Slider(0, 0.5, value=0.33, label="Protect Rate", info="Protects consonants/breath sounds")
-                f0_method = gr.Radio(choices=["pm", "mangio-crepe", "crepe-full", "crepe-tiny", "rmvpe" "pyin"], value="rmvpe", label="Pitch Detection", info="rmvpe for clarity, mangio-crepe for smoothness")
+                f0_method = gr.Radio(choices=["pm", "mangio-crepe", "crepe-full", "crepe-tiny", "rmvpe", "pyin"], value="rmvpe", label="Pitch Detection", info="rmvpe for clarity, mangio-crepe for smoothness")
                 crepe_hop_length = gr.Slider(32, 320, value=128, step=1, visible=False, label="Crepe Hop Length", info="Lower values improve pitch but risk cracks")
             f0_method.change(lambda algo: gr.Slider(visible=algo == "mangio-crepe"), inputs=f0_method, outputs=crepe_hop_length)
             keep_files = gr.Checkbox(label="Keep Intermediate Files", value=False)
