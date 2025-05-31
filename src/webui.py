@@ -6,7 +6,7 @@ import zipfile
 from argparse import ArgumentParser
 from typing import List, Tuple, Optional, Dict
 import gradio as gr
-from src.main import song_cover_pipeline
+from main import song_cover_pipeline
 
 BASE_DIR = os.getcwd()
 sys.path.append(now_dir)
