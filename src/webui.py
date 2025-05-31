@@ -10,7 +10,7 @@ import gradio as gr
 from main import song_cover_pipeline
 
 BASE_DIR = os.getcwd()
-sys.path.append(now_dir)
+sys.path.append(BASE_DIR)
 
 MDXNET_MODELS_DIR = os.path.join(BASE_DIR, "mdxnet_models")
 RVC_MODELS_DIR = os.path.join(BASE_DIR, "rvc_models")
