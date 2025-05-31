@@ -9,6 +9,7 @@ import parselmouth
 import pyworld
 import sys
 from functools import lru_cache
+from my_utils import download_rmvpe
 from time import time as ttime
 
 import faiss
@@ -342,6 +343,7 @@ class VC(object):
         elif f0_method == "rmvpe":
             if not hasattr(self, "model_rmvpe"):
                 from rmvpe import RMVPE
+                download_rmvpe()
                 self.model_rmvpe = RMVPE(
                     os.path.join(BASE_DIR, 'rvc_models', 'rmvpe.pt'), is_half=self.is_half, device=self.device
                 )
