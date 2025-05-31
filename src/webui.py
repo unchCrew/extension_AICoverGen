@@ -15,6 +15,7 @@ sys.path.append(BASE_DIR)
 MDXNET_MODELS_DIR = os.path.join(BASE_DIR, "mdxnet_models")
 RVC_MODELS_DIR = os.path.join(BASE_DIR, "rvc_models")
 OUTPUT_DIR = os.path.join(BASE_DIR, "song_output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)  # Ensure output directory exists
 PUBLIC_MODELS_FILE = os.path.join(RVC_MODELS_DIR, "public_models.json")
 EXCLUDED_MODELS = {"hubert_base.pt", "MODELS.txt", "public_models.json", "rmvpe.pt"}
 DEFAULT_MODEL_SETTINGS = {
@@ -60,6 +61,12 @@ def extract_zip(extraction_folder: str, zip_path: str, progress: gr.Progress = g
         zip_ref.extractall(extraction_folder)
     os.remove(zip_path)
 
+    # Clean up dotfiles
+    for root, _, files in os.walk(extraction_folder):
+        for file in files:
+            if file.startswith("."):
+                os.remove(os.path.join(root, file))
+
     index_filepath, model_filepath = None, None
     for root, _, files in os.walk(extraction_folder):
         for name in files:
@@ -78,11 +85,13 @@ def extract_zip(extraction_folder: str, zip_path: str, progress: gr.Progress = g
     if index_filepath:
         shutil.move(index_filepath, os.path.join(extraction_folder, os.path.basename(index_filepath)))
 
-    # Clean up subdirectories
+    # Clean up subdirectories and dotfiles
     for item in os.listdir(extraction_folder):
         item_path = os.path.join(extraction_folder, item)
         if os.path.isdir(item_path):
             shutil.rmtree(item_path)
+        elif item.startswith("."):
+            os.remove(item_path)
 
     return model_filepath, index_filepath
 
@@ -97,7 +106,7 @@ def download_online_model(url: str, dir_name: str, progress: gr.Progress = gr.Pr
 
     try:
         zip_name = url.split("/")[-1]
-        zip_path = zip_name
+        zip_path = os.path.join(OUTPUT_DIR, zip_name)
         if "pixeldrain.com" in url:
             url = f"https://pixeldrain.com/api/file/{zip_name}"
 
@@ -106,7 +115,7 @@ def download_online_model(url: str, dir_name: str, progress: gr.Progress = gr.Pr
         progress(0.5, desc="Extracting zip...")
         extract_zip(extraction_folder, zip_path)
         gr.Info(f"Model {dir_name} successfully downloaded!")
-        return f"Model {dir_name} successfully downloaded!"
+        return gr.Dropdown(choices=get_current_models(RVC_MODELS_DIR))
         
     except Exception as e:
         raise gr.Error(f"Download failed: {str(e)}")
@@ -129,22 +138,7 @@ def upload_local_model(zip_path: str, dir_name: str, progress: gr.Progress = gr.
         raise gr.Error(f"Upload failed: {str(e)}")
 
 def filter_available_public_models(public_models: Dict, local_models: List[str]) -> Tuple[List[List[str]], List[str]]:
-    """
-    Filter public models to exclude locally installed models and prepare table data.
-
-    Args:
-        public_models: Dictionary containing public models data, with a "voice_models" key.
-        local_models: List of locally installed model names.
-
-    Returns:
-        Tuple containing:
-        - List of model data [name, description, credit, url, tags] for display.
-        - List of available tags.
-
-    Raises:
-        KeyError: If 'voice_models' or required model fields are missing.
-        TypeError: If input types are incorrect.
-    """
+    """Filter public models to exclude locally installed models and prepare table data."""
     if not isinstance(public_models, dict) or "voice_models" not in public_models:
         raise gr.Error("Invalid public models data: 'voice_models' key missing.")
     if not isinstance(local_models, list):
@@ -198,9 +192,24 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
                     pitch = gr.Slider(-3, 3, value=0, step=1, label="Vocal Pitch (Octaves)", info="1 for male-to-female, -1 for vice-versa")
                     pitch_all = gr.Slider(-12, 12, value=0, step=1, label="Overall Pitch (Semitones)", info="Adjusts vocals and instrumentals")
 
-            show_file_upload_button.click(lambda state: (not state, state, "", None), inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
-            show_yt_link_button.click(lambda state: (not state, state, "", None), inputs=[visibility_state], outputs=[yt_link_col, file_upload_col, song_input, local_file])
-            song_input_file.upload(lambda file: (file.name, file.name), inputs=[song_input_file], outputs=[local_file, song_input])
+            show_file_upload_button.click(
+                fn=lambda state: (not state, state, "", None),
+                inputs=[visibility_state],
+                outputs=[yt_link_col, file_upload_col, song_input, local_file]
+            )
+            show_yt_link_button.click(
+                fn=lambda state: (not state, state, "", None),
+                inputs=[visibility_state],
+                outputs=[yt_link_col, file_upload_col, song_input, local_file]
+            )
+            song_input_file.upload(
+                fn=lambda file: (
+                    shutil.copy(file.name, os.path.join(OUTPUT_DIR, os.path.basename(file.name))),
+                    os.path.join(OUTPUT_DIR, os.path.basename(file.name))
+                ),
+                inputs=[song_input_file],
+                outputs=[local_file, song_input]
+            )
 
         with gr.Accordion("Voice Conversion Options", open=False):
             with gr.Row(variant="compact"):
@@ -210,7 +219,11 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
                 protect = gr.Slider(0, 0.5, value=0.33, label="Protect Rate", info="Protects consonants/breath sounds")
                 f0_method = gr.Radio(choices=["pm", "mangio-crepe", "crepe-full", "crepe-tiny", "rmvpe", "pyin"], value="rmvpe", label="Pitch Detection", info="rmvpe for clarity, mangio-crepe for smoothness")
                 crepe_hop_length = gr.Slider(32, 320, value=128, step=1, visible=False, label="Crepe Hop Length", info="Lower values improve pitch but risk cracks")
-            f0_method.change(lambda algo: gr.Slider(visible=algo == "mangio-crepe"), inputs=f0_method, outputs=crepe_hop_length)
+            f0_method.change(
+                fn=lambda algo: gr.Slider(visible=algo == "mangio-crepe"),
+                inputs=f0_method,
+                outputs=crepe_hop_length
+            )
             keep_files = gr.Checkbox(label="Keep Intermediate Files", value=False)
 
         with gr.Accordion("Audio Mixing Options", open=False):
@@ -232,20 +245,23 @@ def create_generate_tab(voice_models: List[str], visibility_state: gr.State) -> 
             generate_btn = gr.Button("Generate", variant="primary")
             ai_cover = gr.Audio(label="AI Cover", interactive=False)
 
-        ref_btn.click(lambda: gr.Dropdown(choices=get_current_models(RVC_MODELS_DIR)), outputs=rvc_model)
+        ref_btn.click(
+            fn=lambda: gr.Dropdown(choices=get_current_models(RVC_MODELS_DIR)),
+            outputs=rvc_model
+        )
         is_webui = gr.State(value=1)
         generate_btn.click(
-            song_cover_pipeline,
+            fn=lambda *args: song_cover_pipeline(*args),
             inputs=[song_input, rvc_model, pitch, keep_files, is_webui, main_gain, backup_gain, inst_gain,
                     index_rate, filter_radius, rms_mix_rate, f0_method, crepe_hop_length, protect, pitch_all,
                     reverb_rm_size, reverb_wet, reverb_dry, reverb_damping, output_format],
             outputs=[ai_cover]
         )
         clear_btn.click(
-            lambda: [DEFAULT_MODEL_SETTINGS[key] for key in ["pitch", "main_gain", "backup_gain", "inst_gain", "index_rate",
-                                                             "filter_radius", "rms_mix_rate", "protect", "f0_method",
-                                                             "crepe_hop_length", "pitch_all", "reverb_rm_size", "reverb_wet",
-                                                             "reverb_dry", "reverb_damping", "output_format"]] + [None, ""],
+            fn=lambda: [DEFAULT_MODEL_SETTINGS[key] for key in ["pitch", "main_gain", "backup_gain", "inst_gain", "index_rate",
+                                                               "filter_radius", "rms_mix_rate", "protect", "f0_method",
+                                                               "crepe_hop_length", "pitch_all", "reverb_rm_size", "reverb_wet",
+                                                               "reverb_dry", "reverb_damping", "output_format"]] + [None, ""],
             outputs=[pitch, main_gain, backup_gain, inst_gain, index_rate, filter_radius, rms_mix_rate, protect,
                      f0_method, crepe_hop_length, pitch_all, reverb_rm_size, reverb_wet, reverb_dry, reverb_damping,
                      output_format, ai_cover, song_input]
@@ -261,7 +277,11 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> N
                 model_name = gr.Textbox(label="Model Name", placeholder="Unique model name")
                 download_btn = gr.Button("🌐 Download", variant="primary")
                 dl_output_message = gr.Textbox()
-                download_btn.click(download_online_model, inputs=[model_zip_link, model_name], outputs=dl_output_message)
+                download_btn.click(
+                    fn=download_online_model,
+                    inputs=[model_zip_link, model_name],
+                    outputs=dl_output_message
+                )
                 gr.Examples(
                     examples=[
                         ["https://huggingface.co/phant0m4r/LiSA/resolve/main/LiSA.zip", "Lisa"],
@@ -283,18 +303,30 @@ def create_download_model_tab(voice_models: List[str], public_models: dict) -> N
                 public_models_table = gr.DataFrame(headers=["Model Name", "Description", "Credit", "URL", "Tags"], interactive=False)
 
                 load_public_models_button.click(
-                    filter_available_public_models,
+                    fn=filter_available_public_models,
                     inputs=[gr.State(value=public_models), gr.State(value=voice_models)],
                     outputs=[public_models_table, filter_tags]
                 )
                 public_models_table.select(
-                    lambda table, event: (table[event.index[0]][3], table[event.index[0]][0]),
+                    fn=lambda table, event: (table[event.index[0]][3], table[event.index[0]][0]),
                     inputs=[public_models_table],
                     outputs=[pub_zip_link, pub_model_name]
                 )
-                search_query.input(filter_models, inputs=[filter_tags, search_query], outputs=public_models_table)
-                filter_tags.input(filter_models, inputs=[filter_tags, search_query], outputs=public_models_table)
-                download_pub_btn.click(download_online_model, inputs=[pub_zip_link, pub_model_name], outputs=pub_dl_output_message)
+                search_query.input(
+                    fn=filter_models,
+                    inputs=[filter_tags, search_query, gr.State(value=public_models)],
+                    outputs=public_models_table
+                )
+                filter_tags.input(
+                    fn=filter_models,
+                    inputs=[filter_tags, search_query, gr.State(value=public_models)],
+                    outputs=public_models_table
+                )
+                download_pub_btn.click(
+                    fn=download_online_model,
+                    inputs=[pub_zip_link, pub_model_name],
+                    outputs=pub_dl_output_message
+                )
 
 def create_upload_model_tab() -> None:
     """Create the Upload Model tab for the Gradio UI."""
@@ -303,8 +335,12 @@ def create_upload_model_tab() -> None:
         zip_file = gr.File(label="Zip File", file_types=[".zip"])
         local_model_name = gr.Textbox(label="Model Name", placeholder="Unique model name")
         model_upload_button = gr.Button("Upload Model", variant="primary")
-        local_upload_output_message = gr.Markdown()
-        model_upload_button.click(upload_local_model, inputs=[zip_file, local_model_name], outputs=[rvc_model, local_upload_output_message])
+        local_upload_output_message = gr.Textbox()
+        model_upload_button.click(
+            fn=upload_local_model,
+            inputs=[zip_file, local_model_name],
+            outputs=[local_upload_output_message]
+        )
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Generate an AI cover song.")
@@ -327,5 +363,6 @@ if __name__ == "__main__":
     app.launch(
         share=args.share,
         server_name=None if not args.listen else (args.listen_host or "0.0.0.0"),
-        server_port=args.listen_port
+        server_port=args.listen_port,
+        allowed_paths=[OUTPUT_DIR]  # Allow the output directory
     )
